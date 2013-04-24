@@ -1,0 +1,8 @@
+#include <stdio.h>
+
+#define PARALLEL_THREADS_PER_CPU 4
+#define uint unsigned int
+
+void primitive_select(int N, int inData[] int outData[]) {
+
+}
