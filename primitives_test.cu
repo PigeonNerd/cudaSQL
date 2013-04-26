@@ -136,6 +136,7 @@ primitive_select(int N, int inData[], int outData[]) {
 	int* out;
 
 	int* tmp = (int*)calloc(N, sizeof(int));
+
 	cudaMalloc((void**) &device_in, sizeof(int) * N);
 	cudaMalloc((void**) &device_result, sizeof(int) * N);
 	cudaMalloc((void**) &out, sizeof(int) * N);
@@ -149,9 +150,22 @@ primitive_select(int N, int inData[], int outData[]) {
 	
     cudaPrintfInit();
 	primitive_select_kernel<<<blocks, threadPerBlock>>>(N, device_in, device_result, result_size);
+
+    int test_result_size[blocks];
+	cudaMemcpy(test_result_size, result_size, sizeof(int)*blocks, cudaMemcpyDeviceToHost);
+    for(int i = 0 ; i < blocks ; i ++) {
+        printf("%d, ", test_result_size[i]);
+    }
+    printf("\n");
 	cudaThreadSynchronize();
-	prescan<<<blocksOfReulstSize, threadPerBlock, threadPerBlock * 2 * sizeof(int)>>>(histogram, result_size, blocks);
+	prescan<<<blocksOfReulstSize, threadPerBlock, blocks * threadPerBlock * 2 * sizeof(int)>>>(histogram, result_size, blocks);
     
+    int test_histgram[blocks];
+	cudaMemcpy(test_histgram, histogram, sizeof(int)*blocks, cudaMemcpyDeviceToHost);
+    for(int i = 0 ; i < blocks; i ++) {
+        printf("%d, ", test_histgram[i]);
+    }
+    printf("\n");
 	coalesced<<<blocks, threadPerBlock>>>(N, device_result, result_size, histogram, out);
 	cudaPrintfDisplay(stdout, true);
  	cudaPrintfEnd();
