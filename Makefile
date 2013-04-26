@@ -3,7 +3,7 @@ EXECUTABLE := cudaSQL
 
 CU_FILES   := primitives_test.cu
 
-CU_DEPS    :=
+CU_DEPS    := scanLargeArray_kernel.cu scan.cu
 
 CC_FILES   := main.cpp
 
@@ -26,7 +26,6 @@ NVCCFLAGS=-O3 -m64 -arch compute_11
 
 
 OBJS=$(OBJDIR)/main.o  $(OBJDIR)/primitives_test.o
-
 
 .PHONY: dirs clean
 

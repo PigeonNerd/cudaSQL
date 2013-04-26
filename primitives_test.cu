@@ -11,6 +11,8 @@
 #include "exclusiveScan.cu_inl"
 #include "cuPrintf.cu"
 
+#include "scan.cu"
+
 using namespace std;
 
 __global__ void prescan(int *g_odata, int *g_idata, int n){
