@@ -3,7 +3,7 @@
 #include <getopt.h>
 #include <string>
 #include <cstdlib>
-
+#include "CycleTimer.h"
 #define magnitude 20 
 
 void printCudaInfo();
@@ -11,6 +11,7 @@ void primitive_select(int N, int inData[], int outData[]);
 void primitive_scan(int N, int inData[], int outData[]);
 void sequential_select(int N , int inData[], int outData[]);
 bool validate(int N, int* sequential, int* target); 
+float toBW(int bytes, float sec);
 
 int main(int argc, char** argv) {
     
@@ -29,9 +30,15 @@ int main(int argc, char** argv) {
 		cuda_result[i] = 0;
 	}
 	primitive_select(NUM_TUPPLES, relation, cuda_result);
+    double startTime = CycleTimer::currentSeconds();
     sequential_select(NUM_TUPPLES, relation, sequential_result); 
+    double endTime = CycleTimer::currentSeconds();
+    double overallDuration = endTime - startTime;
+    printf("Sequential overall: %.3f ms\t\t[%.3f GB/s]\n", 1000.f * overallDuration, toBW( NUM_TUPPLES * sizeof(int) * 2, overallDuration));
 	validate(NUM_TUPPLES, sequential_result, cuda_result);
-    return 0;
+   //primitive_scan(0, NULL, NULL); 
+     
+     return 0;
 }
 
 void sequential_select(int N, int inData[], int outData[]) {
@@ -54,4 +61,8 @@ bool validate(int N, int* sequential, int* target) {
     }
     printf("PASS\n");
     return true;
+}
+
+float toBW(int bytes, float sec) {
+      return static_cast<float>(bytes) / (1024. * 1024. * 1024.) / sec;
 }
