@@ -21,7 +21,7 @@ int main(int argc, char** argv) {
     }
     printf("%d\n", base);
 
-	int NUM_TUPPLES  = base; 
+	int NUM_TUPPLES  = 2 * 1000 * 1000; 
 	int* relation = new int[NUM_TUPPLES];
 	int* cuda_result = new int[NUM_TUPPLES];
 	int* sequential_result = new int[NUM_TUPPLES];
