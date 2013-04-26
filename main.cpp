@@ -29,13 +29,13 @@ int main(int argc, char** argv) {
 		relation[i] = rand() % 100000 + 1;
 		cuda_result[i] = 0;
 	}
-	//primitive_select(NUM_TUPPLES, relation, cuda_result);
+	primitive_select(NUM_TUPPLES, relation, cuda_result);
     double startTime = CycleTimer::currentSeconds();
     sequential_select(NUM_TUPPLES, relation, sequential_result); 
     double endTime = CycleTimer::currentSeconds();
     double overallDuration = endTime - startTime;
     printf("Sequential overall: %.3f ms\t\t[%.3f GB/s]\n", 1000.f * overallDuration, toBW( NUM_TUPPLES * sizeof(int) * 2, overallDuration));
-	//validate(NUM_TUPPLES, sequential_result, cuda_result);
+	validate(NUM_TUPPLES, sequential_result, cuda_result);
    //primitive_scan(0, NULL, NULL); 
      
      return 0;
