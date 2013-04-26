@@ -67,29 +67,40 @@ primitive_select_kernel(int N, int* tuples, int* result, int* result_size) {
 	 __syncthreads();
 	 sharedMemExclusiveScan(threadIndex, input, output, scratch, SCAN_BLOCK_DIM);
 	if(input[threadIndex]){
-		 atomicAdd(result_size + blockIdx.x, 1);
+		 //atomicAdd(result_size + blockIdx.x, 1);
     	 result[partition + output[threadIndex]] = tuples[partition + threadIndex];
  	}
-     __syncthreads();
-}
+     //__syncthreads();
+    // reduction phase
+    extern __shared__ int sdata;
+    unsigned int i = partition + threadIndex;
+    int x = 0;
+    if(i < n)
+      {
+        x = input[i];
+      }
+    sdata[threadIdx.x] = x;
+    __syncthreads();
+    for(int offset = blockDim.x / 2;
+      offset > 0;
+      offset >>= 1)
+  {
+    if(threadIdx.x < offset)
+    {
+      // add a partial sum upstream to our own
+      sdata[threadIdx.x] += sdata[threadIdx.x + offset];
+    }
 
-/*
-	this is a temporary implementation
-*/
-__global__ void tmpScan(int numBlocks, int* result_size, int* histogram) {
-	__shared__ uint input[SCAN_BLOCK_DIM];
-	__shared__ uint output[SCAN_BLOCK_DIM];
-	__shared__ uint scratch[2 * SCAN_BLOCK_DIM];
-	int threadIndex =  threadIdx.x;
-	input[threadIndex] = 0;
-	if( threadIndex < numBlocks) {
-		input[threadIndex] = result_size[threadIndex];
-	}
-	__syncthreads();
-	 sharedMemExclusiveScan(threadIndex, input, output, scratch, SCAN_BLOCK_DIM);
-	 if(input[threadIndex]){
-	 	histogram[threadIndex] = output[threadIndex];
-	 }
+    // wait until all threads in the block have
+    // updated their partial sums
+    __syncthreads();
+  }
+
+  // thread 0 writes the final result
+  if(threadIdx.x == 0)
+  {
+    result_size[blockIdx.x] = sdata[0];
+  }
 }
 
 __global__ void coalesced(int N, int* result, int* result_size, int* histogram, int* out) {
