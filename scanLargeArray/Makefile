@@ -43,7 +43,6 @@ CCFILES		:= \
 CU_DEPS := scanLargeArray_kernel.cu scan.cu
 C_DEPS := 
 
-
 ################################################################################
 # Rules and targets
 
