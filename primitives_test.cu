@@ -1,19 +1,19 @@
 #include <stdio.h>
 #include <cuda.h>
+#include <iostream>
 #include <cuda_runtime.h>
 #include <driver_functions.h>
 #include "device_functions.h"
-#include <iostream>
-
-//#include "CycleTimer.h"
-#define SCAN_BLOCK_DIM 256
+#include <thrust/scan.h>
+#include "CycleTimer.h"
+#define SCAN_BLOCK_DIM 512 
 #define uint unsigned int
 #include "exclusiveScan.cu_inl"
 #include "cuPrintf.cu"
-
 #include "scan.cu"
 
 using namespace std;
+extern float toBW(int bytes, float sec);
 
 __global__ void prescan(int *g_odata, int *g_idata, int n){
 
@@ -103,42 +103,44 @@ __global__ void coalesced(int N, int* result, int* result_size, int* histogram, 
 
 void
 primitive_scan(int N, int inData[], int outData[]) {
-	int* device_in;
-	int* device_result;
-	cudaMalloc((void**) &device_in, sizeof(int) * 8);
-	cudaMalloc((void**) &device_result, sizeof(int) * 8);
-	
-	int billy [8] = { 16, 2, 77, 40, 12071 , 222, 333, 444};
-	cudaMemcpy(device_in, billy, sizeof(int) * 8, cudaMemcpyHostToDevice);
-	cudaPrintfInit();
-	prescan<<<2, 2, 16 * sizeof(int) >>>(device_result, device_in, 8);
-	cudaThreadSynchronize();
-	cudaMemcpy(outData, device_result, sizeof(int) * 8, cudaMemcpyDeviceToHost);
+	int large_num = 512;
+    float tmp[large_num];
+    float* large_in;
+    float* large_out;
 
-    for(int i = 0; i < 8 ; i ++) {
-        cout<< outData[i] << ", ";
+	cudaMalloc((void**) &large_in, sizeof(float) * large_num);
+	cudaMalloc((void**) &large_out, sizeof(float) * large_num);
+    
+    for(int i = 0; i < large_num; i ++) {
+        tmp[i] = 1.0;
     }
-    cout << endl;
-	cudaPrintfDisplay(stdout, true);
- 	cudaPrintfEnd();
+	cudaMemcpy(large_in, tmp, sizeof(float) * large_num, cudaMemcpyHostToDevice);
+    preallocBlockSums(large_num);
+    prescanArray(large_out, large_in, large_num);
+	cudaMemcpy(tmp, large_out, sizeof(float) * large_num, cudaMemcpyDeviceToHost);
+    for(int i = 0; i < large_num; i ++) {
+        printf("%f ", tmp[i]);
+    }
+    printf("\n");
 }
 
 void 
 primitive_select(int N, int inData[], int outData[]) {
-	const int threadPerBlock = 256;
+	const int threadPerBlock = 512;
 	const int blocks = (N + threadPerBlock - 1) / threadPerBlock;
 	const int blocksOfReulstSize = ( blocks + threadPerBlock - 1) / threadPerBlock;
+    int totalBytes = N * sizeof(int) * 2;
     printf("Num of tuples %d\n", N);
 	printf("Num of blocks %d\n", blocks);
 	printf("Num of blocks for result size %d\n", blocksOfReulstSize);
+    
     int* device_in;
 	int* device_result;
 	int* result_size;
 	int* histogram;
 	int* out;
-
 	int* tmp = (int*)calloc(N, sizeof(int));
-
+    double startTime = CycleTimer::currentSeconds();
 	cudaMalloc((void**) &device_in, sizeof(int) * N);
 	cudaMalloc((void**) &device_result, sizeof(int) * N);
 	cudaMalloc((void**) &out, sizeof(int) * N);
@@ -149,30 +151,40 @@ primitive_select(int N, int inData[], int outData[]) {
 	cudaMemcpy(device_result, tmp, sizeof(int) * N, cudaMemcpyHostToDevice);
 	cudaMemcpy(out, tmp, sizeof(int) * N, cudaMemcpyHostToDevice);
 	cudaMemcpy(result_size, tmp, sizeof(int) * blocks, cudaMemcpyHostToDevice);
-	
     cudaPrintfInit();
+    double startTime_inner = CycleTimer::currentSeconds();	
 	primitive_select_kernel<<<blocks, threadPerBlock>>>(N, device_in, device_result, result_size);
 
-    int test_result_size[blocks];
-	cudaMemcpy(test_result_size, result_size, sizeof(int)*blocks, cudaMemcpyDeviceToHost);
-    for(int i = 0 ; i < blocks ; i ++) {
-        printf("%d, ", test_result_size[i]);
-    }
-    printf("\n");
+   // int test_result_size[blocks];
+   // cudaMemcpy(test_result_size, result_size, sizeof(int)*blocks, cudaMemcpyDeviceToHost);
+   // for(int i = 0 ; i < blocks ; i ++) {
+   //     printf("%d, ", test_result_size[i]);
+   // }
+   // printf("\n");
 	cudaThreadSynchronize();
-	prescan<<<blocksOfReulstSize, threadPerBlock, blocks * threadPerBlock * 2 * sizeof(int)>>>(histogram, result_size, blocks);
+	//prescan<<<blocksOfReulstSize, threadPerBlock, blocks * threadPerBlock * 2 * sizeof(int)>>>(histogram, result_size, blocks);
     
-    int test_histgram[blocks];
-	cudaMemcpy(test_histgram, histogram, sizeof(int)*blocks, cudaMemcpyDeviceToHost);
-    for(int i = 0 ; i < blocks; i ++) {
-        printf("%d, ", test_histgram[i]);
-    }
-    printf("\n");
+    thrust::device_ptr<int> dev_ptr1(result_size);
+    thrust::device_ptr<int> dev_ptr2(histogram);
+    thrust::exclusive_scan(dev_ptr1, dev_ptr1 + blocks, dev_ptr2);
+   // int test_histgram[blocks];
+   // cudaMemcpy(test_histgram, histogram, sizeof(int)*blocks, cudaMemcpyDeviceToHost);
+   // for(int i = 0 ; i < blocks; i ++) {
+   //     printf("%d, ", test_histgram[i]);
+   // }
+   // printf("\n");
 	coalesced<<<blocks, threadPerBlock>>>(N, device_result, result_size, histogram, out);
-	cudaPrintfDisplay(stdout, true);
+    double endTime_inner = CycleTimer::currentSeconds();
+    cudaPrintfDisplay(stdout, true);
  	cudaPrintfEnd();
-	cudaMemcpy(outData, out, sizeof(int) * N, cudaMemcpyDeviceToHost);
-
+    cudaMemcpy(outData, out, sizeof(int) * N, cudaMemcpyDeviceToHost);
+    double endTime = CycleTimer::currentSeconds();
+    
+    double overallDuration = endTime - startTime;
+    double kernelDuration = endTime_inner - startTime_inner;
+    
+    printf("CUDA overall: %.3f ms\t\t[%.3f GB/s]\n", 1000.f * overallDuration, toBW(totalBytes, overallDuration));
+    printf("CUDA execution time for kernel: %.3f ms\t\t[%.3f GB/s]\n", 1000.f*kernelDuration, toBW(totalBytes, kernelDuration));
     cudaFree(device_in);
     cudaFree(device_result);
     cudaFree(out);
