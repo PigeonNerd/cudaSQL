@@ -70,37 +70,22 @@ primitive_select_kernel(int N, int* tuples, int* result, int* result_size) {
 		 //atomicAdd(result_size + blockIdx.x, 1);
     	 result[partition + output[threadIndex]] = tuples[partition + threadIndex];
  	}
-     //__syncthreads();
-    // reduction phase
-    extern __shared__ int sdata;
-    unsigned int i = partition + threadIndex;
-    int x = 0;
-    if(i < n)
-      {
-        x = input[i];
+    
+      for(int offset = blockDim.x / 2; offset > 0; offset >>= 1) {
+        if(threadIdx.x < offset) {
+          // add a partial sum upstream to our own
+          input[threadIdx.x] += input[threadIdx.x + offset];
+        }
+
+        // wait until all threads in the block have
+        // updated their partial sums
+        __syncthreads();
       }
-    sdata[threadIdx.x] = x;
-    __syncthreads();
-    for(int offset = blockDim.x / 2;
-      offset > 0;
-      offset >>= 1)
-  {
-    if(threadIdx.x < offset)
-    {
-      // add a partial sum upstream to our own
-      sdata[threadIdx.x] += sdata[threadIdx.x + offset];
-    }
 
-    // wait until all threads in the block have
-    // updated their partial sums
-    __syncthreads();
-  }
-
-  // thread 0 writes the final result
-  if(threadIdx.x == 0)
-  {
-    result_size[blockIdx.x] = sdata[0];
-  }
+      // thread 0 writes the final result
+      if(threadIdx.x == 0) {
+        result_size[blockIdx.x] = input[0];
+      }
 }
 
 __global__ void coalesced(int N, int* result, int* result_size, int* histogram, int* out) {
