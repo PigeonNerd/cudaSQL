@@ -4,7 +4,7 @@
 #include <string>
 #include <cstdlib>
 #include "CycleTimer.h"
-#define magnitude 20 
+#define magnitude 10 
 
 void printCudaInfo();
 void primitive_select(int N, int inData[], int outData[]);
@@ -21,7 +21,7 @@ int main(int argc, char** argv) {
     }
     printf("%d\n", base);
 
-	int NUM_TUPPLES  = 20 * 1000 * 1000; 
+	int NUM_TUPPLES  =  20 * 1000 * 1000; 
 	int* relation = new int[NUM_TUPPLES];
 	int* cuda_result = new int[NUM_TUPPLES];
 	int* sequential_result = new int[NUM_TUPPLES];
@@ -36,7 +36,7 @@ int main(int argc, char** argv) {
     double overallDuration = endTime - startTime;
     printf("Sequential overall: %.3f ms\t\t[%.3f GB/s]\n", 1000.f * overallDuration, toBW( NUM_TUPPLES * sizeof(int) * 2, overallDuration));
 	validate(NUM_TUPPLES, sequential_result, cuda_result);
-   //primitive_scan(0, NULL, NULL); 
+   // primitive_scan(0, NULL, NULL); 
      
      return 0;
 }

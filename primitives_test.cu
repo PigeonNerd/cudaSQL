@@ -99,25 +99,37 @@ __global__ void coalesced(int N, int* result, int* result_size, int* histogram, 
 
 void
 primitive_scan(int N, int inData[], int outData[]) {
-	int large_num = 512;
+	int large_num = 39063;
     float tmp[large_num];
     float* large_in;
     float* large_out;
-
+    double startTime;	
+    double endTime;
 	cudaMalloc((void**) &large_in, sizeof(float) * large_num);
 	cudaMalloc((void**) &large_out, sizeof(float) * large_num);
-    
+    //cudaMemset(large_in, 1, large_num * sizeof(float)); 
     for(int i = 0; i < large_num; i ++) {
         tmp[i] = 1.0;
     }
 	cudaMemcpy(large_in, tmp, sizeof(float) * large_num, cudaMemcpyHostToDevice);
+    startTime = CycleTimer::currentSeconds();	
     preallocBlockSums(large_num);
     prescanArray(large_out, large_in, large_num);
-	cudaMemcpy(tmp, large_out, sizeof(float) * large_num, cudaMemcpyDeviceToHost);
+    endTime = CycleTimer::currentSeconds();	
+   printf("time excution from large array scan %.3f ms\n", 1000.f * (endTime  - startTime));
+   /* startTime = CycleTimer::currentSeconds();	
+    thrust::device_ptr<float> dev_ptr1(large_in);
+    thrust::device_ptr<float> dev_ptr2(large_out);
+    thrust::exclusive_scan(dev_ptr1, dev_ptr1 + large_num, dev_ptr2);
+    endTime = CycleTimer::currentSeconds();	
+   printf("time excution from thrust scan %.3f ms\n",1000.f * (endTime  - startTime));*/
+    cudaMemcpy(tmp, large_out, sizeof(float) * large_num, cudaMemcpyDeviceToHost);
     for(int i = 0; i < large_num; i ++) {
         printf("%f ", tmp[i]);
     }
     printf("\n");
+    int y[] = {1, 2};
+    printf("%d\n", y[(int)tmp[1]]);
 }
 
 void 
@@ -187,6 +199,28 @@ primitive_select(int N, int inData[], int outData[]) {
     cudaFree(result_size);
     cudaFree(histogram);
 }	
+#define NN   (1024*1024)
+#define FULL_DATA_SIZE   (N*20)
+
+__global__ void kernel( int *a, int *b, int *c ) {
+ int idx = threadIdx.x + blockIdx.x * blockDim.x;
+      if (idx < N) {
+             int idx1 = (idx + 1) % 256;
+             int idx2 = (idx + 2) % 256;
+             float   as = (a[idx] + a[idx1] + a[idx2]) / 3.0f;
+             float   bs = (b[idx] + b[idx1] + b[idx2]) / 3.0f;
+             c[idx] = (as + bs) / 2;
+        }
+}
+
+void streamTest() {
+
+
+
+}
+
+
+
 
 void
 printCudaInfo() {
