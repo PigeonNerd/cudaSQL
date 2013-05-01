@@ -10,6 +10,7 @@ void printCudaInfo();
 void primitive_select(int N, int inData[], int outData[]);
 void primitive_scan(int N, int inData[], int outData[]);
 void sequential_select(int N , int inData[], int outData[]);
+void streamTest();
 bool validate(int N, int* sequential, int* target); 
 float toBW(int bytes, float sec);
 
@@ -37,7 +38,7 @@ int main(int argc, char** argv) {
     printf("Sequential overall: %.3f ms\t\t[%.3f GB/s]\n", 1000.f * overallDuration, toBW( NUM_TUPPLES * sizeof(int) * 2, overallDuration));
 	validate(NUM_TUPPLES, sequential_result, cuda_result);
    // primitive_scan(0, NULL, NULL); 
-     
+      streamTest(); 
      return 0;
 }
 

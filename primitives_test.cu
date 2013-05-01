@@ -11,7 +11,7 @@
 #include "exclusiveScan.cu_inl"
 #include "cuPrintf.cu"
 #include "scan.cu"
-
+#include "book.h"
 using namespace std;
 extern float toBW(int bytes, float sec);
 
@@ -199,7 +199,7 @@ primitive_select(int N, int inData[], int outData[]) {
     cudaFree(result_size);
     cudaFree(histogram);
 }	
-#define NN   (1024*1024)
+#define N   (1024*1024)
 #define FULL_DATA_SIZE   (N*20)
 
 __global__ void kernel( int *a, int *b, int *c ) {
@@ -213,7 +213,7 @@ __global__ void kernel( int *a, int *b, int *c ) {
         }
 }
 
-void streamTest() {
+void  streamTest() {
 
   cudaDeviceProp  prop;
     int whichDevice;
@@ -221,7 +221,6 @@ void streamTest() {
     HANDLE_ERROR( cudaGetDeviceProperties( &prop, whichDevice ) );
     if (!prop.deviceOverlap) {
         printf( "Device will not handle overlaps, so no speed up from streams\n" );
-        return 0;
     }
 
     cudaEvent_t     start, stop;
