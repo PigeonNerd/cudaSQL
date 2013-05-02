@@ -5,6 +5,7 @@
 #include <driver_functions.h>
 #include "device_functions.h"
 #include <thrust/scan.h>
+#include <thrust/sort.h>
 #include "CycleTimer.h"
 #define SCAN_BLOCK_DIM 512 
 #define uint unsigned int
@@ -15,6 +16,8 @@
 using namespace std;
 extern float toBW(int bytes, float sec);
 
+
+// This scan only work on small buffer, do not used on large array
 __global__ void prescan(int *g_odata, int *g_idata, int n){
 
     extern __shared__ int temp[];// allocated on invocation
@@ -49,6 +52,10 @@ __global__ void prescan(int *g_odata, int *g_idata, int n){
     g_odata[2*thid+1] = temp[2*thid+1];
 }
 
+/*
+    choose the quilified tuples from the relation
+    and get the cout of tuples of each block
+*/
 __global__ void
 primitive_select_kernel(int N, int* tuples, int* result, int* result_size) {
 
@@ -88,6 +95,9 @@ primitive_select_kernel(int N, int* tuples, int* result, int* result_size) {
       }
 }
 
+/*
+    gather stage
+*/
 __global__ void coalesced(int N, int* result, int* result_size, int* histogram, int* out) {
 	int threadIndex =  threadIdx.x;
 	int partition = blockIdx.x *  blockDim.x;
@@ -97,6 +107,11 @@ __global__ void coalesced(int N, int* result, int* result_size, int* histogram, 
 	__syncthreads();
 }
 
+
+/* 
+    This is a sample of how to use scanLargeArray 
+    from Nvidia SDK
+*/
 void
 primitive_scan(int N, int inData[], int outData[]) {
 	int large_num = 39063;
@@ -132,6 +147,10 @@ primitive_scan(int N, int inData[], int outData[]) {
     printf("%d\n", y[(int)tmp[1]]);
 }
 
+
+/*
+    Implementation of SELECT operation
+*/
 void 
 primitive_select(int N, int inData[], int outData[]) {
 	const int threadPerBlock = 512;
@@ -141,7 +160,6 @@ primitive_select(int N, int inData[], int outData[]) {
     printf("Num of tuples %d\n", N);
 	printf("Num of blocks %d\n", blocks);
 	printf("Num of blocks for result size %d\n", blocksOfReulstSize);
-    
     int* device_in;
 	int* device_result;
 	int* result_size;
@@ -154,14 +172,14 @@ primitive_select(int N, int inData[], int outData[]) {
 	cudaMalloc((void**) &out, sizeof(int) * N);
 	cudaMalloc((void**) &result_size, sizeof(int) * blocks);
 	cudaMalloc((void**) &histogram, sizeof(int) * blocks);
-
 	cudaMemcpy(device_in, inData, sizeof(int) * N, cudaMemcpyHostToDevice);
 	cudaMemcpy(device_result, tmp, sizeof(int) * N, cudaMemcpyHostToDevice);
 	cudaMemcpy(out, tmp, sizeof(int) * N, cudaMemcpyHostToDevice);
 	cudaMemcpy(result_size, tmp, sizeof(int) * blocks, cudaMemcpyHostToDevice);
     cudaPrintfInit();
     double startTime_inner = CycleTimer::currentSeconds();	
-	primitive_select_kernel<<<blocks, threadPerBlock>>>(N, device_in, device_result, result_size);
+	for(int i = 0 ; i < 10 ; i ++) {
+    primitive_select_kernel<<<blocks, threadPerBlock>>>(N, device_in, device_result, result_size);
 
    // int test_result_size[blocks];
    // cudaMemcpy(test_result_size, result_size, sizeof(int)*blocks, cudaMemcpyDeviceToHost);
@@ -182,6 +200,7 @@ primitive_select(int N, int inData[], int outData[]) {
    // }
    // printf("\n");
 	coalesced<<<blocks, threadPerBlock>>>(N, device_result, result_size, histogram, out);
+    } 
     double endTime_inner = CycleTimer::currentSeconds();
     cudaPrintfDisplay(stdout, true);
  	cudaPrintfEnd();
@@ -190,7 +209,6 @@ primitive_select(int N, int inData[], int outData[]) {
     
     double overallDuration = endTime - startTime;
     double kernelDuration = endTime_inner - startTime_inner;
-    
     printf("CUDA overall: %.3f ms\t\t[%.3f GB/s]\n", 1000.f * overallDuration, toBW(totalBytes, overallDuration));
     printf("CUDA execution time for kernel: %.3f ms\t\t[%.3f GB/s]\n", 1000.f*kernelDuration, toBW(totalBytes, kernelDuration));
     cudaFree(device_in);
@@ -199,6 +217,66 @@ primitive_select(int N, int inData[], int outData[]) {
     cudaFree(result_size);
     cudaFree(histogram);
 }	
+
+
+
+__global__ void binary_partition(int2* rel_a, int2* rel_b, int* out_bound, int N, int M) {
+	int threadIndex =  threadIdx.x;
+	int partition = blockIdx.x *  blockDim.x;
+    const int lower_bound = rel_a[blockIdx.x *  blockDim.x];
+    const int upper_bound = rel_a[(blockIdx.x + 1) * blockDim.x - 1];
+}
+
+
+/*
+    Implementation of JOIN operationi
+    rel_a: left relation
+    rel_b: right relation
+    N: size of rel_a
+    M: size of rel_b
+*/
+struct compare_int2 { 
+    __host__ __device__ 
+    bool operator()(int2 a, int2 b) {  
+        return a.x <= b.x;
+    }
+}; 
+void primitive_join(int N, int M) {
+    // prepare host buffers
+    int min = 1;
+    int max = 20;
+    int2* rel_a = new int2[N];
+    int2* rel_b = new int2[M];
+    for(int i = 0; i < N; i ++) {
+        rel_a[i] = make_int2(min + (rand() % (int)(max - min + 1)), min + (rand() % (int)(max - min + 1)) );
+    }
+    for(int i = 0; i < M; i ++) {
+        rel_b[i] = make_int2(min + (rand() % (int)(max - min + 1)), min + (rand() % (int)(max - min + 1)) );
+    }
+    thrust::sort(rel_a, rel_a + N, compare_int2());
+    thrust::sort(rel_b, rel_b + M, compare_int2());
+
+    // prepare device buffers
+	const int threadPerBlock = 512;
+	const int blocks = (N + threadPerBlock - 1) / threadPerBlock;
+    int2* dev_rel_a;
+    int2* dev_rel_b;
+    int* out_bound;
+    cudaMalloc((void**) &out_bound, sizeof(int) * blocks);
+    cudaMalloc((void**) &dev_rel_a, sizeof(int2) * N);
+    cudaMalloc((void**) &dev_rel_b, sizeof(int2) * M);
+	cudaMemcpy(dev_rel_a, rel_a, sizeof(int2) * N, cudaMemcpyHostToDevice);
+	cudaMemcpy(dev_rel_b, rel_b, sizeof(int2) * M, cudaMemcpyHostToDevice);
+
+
+
+}
+
+
+
+
+
+
 #define N   (1024*1024)
 #define FULL_DATA_SIZE   (N*20)
 
@@ -330,94 +408,32 @@ void  streamTest() {
 }
 
 void sequentialTest() {
-   cudaDeviceProp  prop;
-    int whichDevice;
-    HANDLE_ERROR( cudaGetDevice( &whichDevice ) );
-    HANDLE_ERROR( cudaGetDeviceProperties( &prop, whichDevice ) );
-    if (!prop.deviceOverlap) {
-        printf( "Device will not handle overlaps, so no speed up from streams\n" );
-    }
-
     cudaEvent_t     start, stop;
     float           elapsedTime;
-
-    cudaStream_t    stream;
-    int *host_a, *host_b, *host_c;
-    int *dev_a, *dev_b, *dev_c;
-
-    // start the timers
     HANDLE_ERROR( cudaEventCreate( &start ) );
     HANDLE_ERROR( cudaEventCreate( &stop ) );
-
-    // initialize the stream
-    HANDLE_ERROR( cudaStreamCreate( &stream ) );
-
+    int* host_a = new int[FULL_DATA_SIZE];
+    int* host_b = new int[FULL_DATA_SIZE];
+    int* host_c = new int[FULL_DATA_SIZE];
+    int *dev_a, *dev_b, *dev_c;
     // allocate the memory on the GPU
-    HANDLE_ERROR( cudaMalloc( (void**)&dev_a,
-                              N * sizeof(int) ) );
-    HANDLE_ERROR( cudaMalloc( (void**)&dev_b,
-                              N * sizeof(int) ) );
-    HANDLE_ERROR( cudaMalloc( (void**)&dev_c,
-                              N * sizeof(int) ) );
-
-    // allocate host locked memory, used to stream
-    HANDLE_ERROR( cudaHostAlloc( (void**)&host_a,
-                              FULL_DATA_SIZE * sizeof(int),
-                              cudaHostAllocDefault ) );
-    HANDLE_ERROR( cudaHostAlloc( (void**)&host_b,
-                              FULL_DATA_SIZE * sizeof(int),
-                              cudaHostAllocDefault ) );
-    HANDLE_ERROR( cudaHostAlloc( (void**)&host_c,
-                              FULL_DATA_SIZE * sizeof(int),
-                              cudaHostAllocDefault ) );
-
+    cudaMalloc( (void**)&dev_a, FULL_DATA_SIZE * sizeof(int));
+    cudaMalloc( (void**)&dev_b, FULL_DATA_SIZE * sizeof(int));
+    cudaMalloc( (void**)&dev_c, FULL_DATA_SIZE * sizeof(int));
     for (int i=0; i<FULL_DATA_SIZE; i++) {
         host_a[i] = rand();
         host_b[i] = rand();
     }
-
     HANDLE_ERROR( cudaEventRecord( start, 0 ) );
-    // now loop over full data, in bite-sized chunks
-    for (int i=0; i<FULL_DATA_SIZE; i+= N) {
-        // copy the locked memory to the device, async
-        HANDLE_ERROR( cudaMemcpyAsync( dev_a, host_a+i,
-                                       N * sizeof(int),
-                                       cudaMemcpyHostToDevice,
-                                       stream ) );
-        HANDLE_ERROR( cudaMemcpyAsync( dev_b, host_b+i,
-                                       N * sizeof(int),
-                                       cudaMemcpyHostToDevice,
-                                       stream ) );
-
-        kernel<<<N/256,256,0,stream>>>( dev_a, dev_b, dev_c );
-
-        // copy the data from device to locked memory
-        HANDLE_ERROR( cudaMemcpyAsync( host_c+i, dev_c,
-                                       N * sizeof(int),
-                                       cudaMemcpyDeviceToHost,
-                                       stream ) );
-
-    }
-    // copy result chunk from locked to full buffer
-    HANDLE_ERROR( cudaStreamSynchronize( stream ) );
-
+	cudaMemcpy(dev_a, host_a, sizeof(int) * FULL_DATA_SIZE, cudaMemcpyHostToDevice);
+	cudaMemcpy(dev_b, host_b, sizeof(int) * FULL_DATA_SIZE, cudaMemcpyHostToDevice);
+    kernel<<<FULL_DATA_SIZE/256,256,0>>>( dev_a, dev_b, dev_c);
+    cudaMemcpyAsync( host_c, dev_c, FULL_DATA_SIZE * sizeof(int), cudaMemcpyDeviceToHost);
     HANDLE_ERROR( cudaEventRecord( stop, 0 ) );
-
     HANDLE_ERROR( cudaEventSynchronize( stop ) );
     HANDLE_ERROR( cudaEventElapsedTime( &elapsedTime,
                                         start, stop ) );
     printf( "Time taken:  %3.1f ms\n", elapsedTime );
-
-    // cleanup the streams and memory
-    HANDLE_ERROR( cudaFreeHost( host_a ) );
-    HANDLE_ERROR( cudaFreeHost( host_b ) );
-    HANDLE_ERROR( cudaFreeHost( host_c ) );
-    HANDLE_ERROR( cudaFree( dev_a ) );
-    HANDLE_ERROR( cudaFree( dev_b ) );
-    HANDLE_ERROR( cudaFree( dev_c ) );
-    HANDLE_ERROR( cudaStreamDestroy( stream ) );
-
-
 }
 
 void
