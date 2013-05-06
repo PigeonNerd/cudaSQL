@@ -7,7 +7,7 @@
 #include <thrust/scan.h>
 #include <thrust/sort.h>
 #include "CycleTimer.h"
-#define SCAN_BLOCK_DIM 512 
+#define SCAN_BLOCK_DIM 512
 #define uint unsigned int
 #include "exclusiveScan.cu_inl"
 #include "cuPrintf.cu"
@@ -77,7 +77,7 @@ primitive_select_kernel(int N, int* tuples, int* result, int* result_size) {
 		 //atomicAdd(result_size + blockIdx.x, 1);
     	 result[partition + output[threadIndex]] = tuples[partition + threadIndex];
  	}
-    
+
       for(int offset = blockDim.x / 2; offset > 0; offset >>= 1) {
         if(threadIdx.x < offset) {
           // add a partial sum upstream to our own
@@ -108,8 +108,8 @@ __global__ void coalesced(int N, int* result, int* result_size, int* histogram, 
 }
 
 
-/* 
-    This is a sample of how to use scanLargeArray 
+/*
+    This is a sample of how to use scanLargeArray
     from Nvidia SDK
 */
 void
@@ -118,25 +118,25 @@ primitive_scan(int N, int inData[], int outData[]) {
     float tmp[large_num];
     float* large_in;
     float* large_out;
-    double startTime;	
+    double startTime;
     double endTime;
 	cudaMalloc((void**) &large_in, sizeof(float) * large_num);
 	cudaMalloc((void**) &large_out, sizeof(float) * large_num);
-    //cudaMemset(large_in, 1, large_num * sizeof(float)); 
+    //cudaMemset(large_in, 1, large_num * sizeof(float));
     for(int i = 0; i < large_num; i ++) {
         tmp[i] = 1.0;
     }
 	cudaMemcpy(large_in, tmp, sizeof(float) * large_num, cudaMemcpyHostToDevice);
-    startTime = CycleTimer::currentSeconds();	
+    startTime = CycleTimer::currentSeconds();
     preallocBlockSums(large_num);
     prescanArray(large_out, large_in, large_num);
-    endTime = CycleTimer::currentSeconds();	
+    endTime = CycleTimer::currentSeconds();
    printf("time excution from large array scan %.3f ms\n", 1000.f * (endTime  - startTime));
-   /* startTime = CycleTimer::currentSeconds();	
+   /* startTime = CycleTimer::currentSeconds();
     thrust::device_ptr<float> dev_ptr1(large_in);
     thrust::device_ptr<float> dev_ptr2(large_out);
     thrust::exclusive_scan(dev_ptr1, dev_ptr1 + large_num, dev_ptr2);
-    endTime = CycleTimer::currentSeconds();	
+    endTime = CycleTimer::currentSeconds();
    printf("time excution from thrust scan %.3f ms\n",1000.f * (endTime  - startTime));*/
     cudaMemcpy(tmp, large_out, sizeof(float) * large_num, cudaMemcpyDeviceToHost);
     for(int i = 0; i < large_num; i ++) {
@@ -151,7 +151,7 @@ primitive_scan(int N, int inData[], int outData[]) {
 /*
     Implementation of SELECT operation
 */
-void 
+void
 primitive_select(int N, int inData[], int outData[]) {
 	const int threadPerBlock = 512;
 	const int blocks = (N + threadPerBlock - 1) / threadPerBlock;
@@ -177,7 +177,7 @@ primitive_select(int N, int inData[], int outData[]) {
 	cudaMemcpy(out, tmp, sizeof(int) * N, cudaMemcpyHostToDevice);
 	cudaMemcpy(result_size, tmp, sizeof(int) * blocks, cudaMemcpyHostToDevice);
     cudaPrintfInit();
-    double startTime_inner = CycleTimer::currentSeconds();	
+    double startTime_inner = CycleTimer::currentSeconds();
 	for(int i = 0 ; i < 10 ; i ++) {
     primitive_select_kernel<<<blocks, threadPerBlock>>>(N, device_in, device_result, result_size);
 
@@ -189,7 +189,7 @@ primitive_select(int N, int inData[], int outData[]) {
    // printf("\n");
 	cudaThreadSynchronize();
 	//prescan<<<blocksOfReulstSize, threadPerBlock, blocks * threadPerBlock * 2 * sizeof(int)>>>(histogram, result_size, blocks);
-    
+
     thrust::device_ptr<int> dev_ptr1(result_size);
     thrust::device_ptr<int> dev_ptr2(histogram);
     thrust::exclusive_scan(dev_ptr1, dev_ptr1 + blocks, dev_ptr2);
@@ -200,13 +200,13 @@ primitive_select(int N, int inData[], int outData[]) {
    // }
    // printf("\n");
 	coalesced<<<blocks, threadPerBlock>>>(N, device_result, result_size, histogram, out);
-    } 
+    }
     double endTime_inner = CycleTimer::currentSeconds();
     cudaPrintfDisplay(stdout, true);
  	cudaPrintfEnd();
     cudaMemcpy(outData, out, sizeof(int) * N, cudaMemcpyDeviceToHost);
     double endTime = CycleTimer::currentSeconds();
-    
+
     double overallDuration = endTime - startTime;
     double kernelDuration = endTime_inner - startTime_inner;
     printf("CUDA overall: %.3f ms\t\t[%.3f GB/s]\n", 1000.f * overallDuration, toBW(totalBytes, overallDuration));
@@ -216,15 +216,46 @@ primitive_select(int N, int inData[], int outData[]) {
     cudaFree(out);
     cudaFree(result_size);
     cudaFree(histogram);
-}	
+}
 
+struct bin_partitions {
+       int rel_a_low;
+       int rel_a_high;
+       int rel_b_low;
+       int rel_b_high;
+}
 
+__global__ block_storage = new bin_partitions[threadIdx.x * blockIdx.x * blockDim.x];
+
+__global__ int binary_search(int2* rel, const int bound, int low, int high){
+	int mid = (low + high) / 2;
+	if (rel[mid] == bound) {
+	   return mid;
+	} else if (rel[mid] < bound) {
+	   return binary_search(rel, bound, mid, high);
+	} else if (rel[mid] > bound) {
+	  return binary_search(rel, bound, 0, mid);
+	}
+
+	return -1;
+}
 
 __global__ void binary_partition(int2* rel_a, int2* rel_b, int* out_bound, int N, int M) {
 	int threadIndex =  threadIdx.x;
 	int partition = blockIdx.x *  blockDim.x;
-    const int lower_bound = rel_a[blockIdx.x *  blockDim.x];
-    const int upper_bound = rel_a[(blockIdx.x + 1) * blockDim.x - 1];
+	const int lower_bound = rel_a[blockIdx.x *  blockDim.x];
+    	const int upper_bound = rel_a[(blockIdx.x + 1) * blockDim.x - 1];
+
+	int low_index = binary_search(rel_b, lower_bound, 0, M);
+	int high_index = binary_search(rel_b, upper_bound, 0, M);
+
+	bin_partition indeces = new bin_partitions(lower_bound, upper_bound, low_index, high_index);
+	out_bound[partition] = (indeces.upper_bound - indeces.lower_bound) * (indeces.high_index - indeces.low_index);
+
+	//prefix sum of outbound after finish all blocks of rel_a
+
+	//JOIN
+
 }
 
 
@@ -235,12 +266,14 @@ __global__ void binary_partition(int2* rel_a, int2* rel_b, int* out_bound, int N
     N: size of rel_a
     M: size of rel_b
 */
-struct compare_int2 { 
-    __host__ __device__ 
-    bool operator()(int2 a, int2 b) {  
+struct compare_int2 {
+
+    __host__ __device__
+    bool operator()(int2 a, int2 b) {
         return a.x <= b.x;
     }
-}; 
+};
+
 void primitive_join(int N, int M) {
     // prepare host buffers
     int min = 1;
@@ -268,14 +301,9 @@ void primitive_join(int N, int M) {
 	cudaMemcpy(dev_rel_a, rel_a, sizeof(int2) * N, cudaMemcpyHostToDevice);
 	cudaMemcpy(dev_rel_b, rel_b, sizeof(int2) * M, cudaMemcpyHostToDevice);
 
-
+	binary_partition(rel_a, rel_b, out_bound, N, M);
 
 }
-
-
-
-
-
 
 #define N   (1024*1024)
 #define FULL_DATA_SIZE   (N*20)
@@ -369,7 +397,7 @@ void  streamTest() {
                                        cudaMemcpyHostToDevice,
                                        stream1 ) );
 
-        // enqueue kernels in stream0 and stream1   
+        // enqueue kernels in stream0 and stream1
         kernel<<<N/256,256,0,stream0>>>( dev_a0, dev_b0, dev_c0 );
         kernel<<<N/256,256,0,stream1>>>( dev_a1, dev_b1, dev_c1 );
 
