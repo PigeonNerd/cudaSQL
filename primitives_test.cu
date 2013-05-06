@@ -225,8 +225,6 @@ struct bin_partitions {
        int rel_b_high;
 }
 
-__global__ block_storage = new bin_partitions[threadIdx.x * blockIdx.x * blockDim.x];
-
 __global__ int binary_search(int2* rel, const int bound, int low, int high){
 	int mid = (low + high) / 2;
 	if (rel[mid] == bound) {
@@ -252,7 +250,10 @@ __global__ void binary_partition(int2* rel_a, int2* rel_b, int* out_bound, int N
 	bin_partition indeces = new bin_partitions(lower_bound, upper_bound, low_index, high_index);
 	out_bound[partition] = (indeces.upper_bound - indeces.lower_bound) * (indeces.high_index - indeces.low_index);
 
+	__syncthreads();
+
 	//prefix sum of outbound after finish all blocks of rel_a
+
 
 	//JOIN
 
