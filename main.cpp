@@ -26,8 +26,12 @@ int main(int argc, char** argv) {
 
 
 void test_join() {
-	int NUM_TUPPLES_A  =  40; 
-	int NUM_TUPPLES_B  =  40; 
+    int base = 1;
+    for(int i = 0; i < magnitude; i ++) {
+        base <<= 1; 
+    }
+	int NUM_TUPPLES_A  =  20; 
+	int NUM_TUPPLES_B  =  20; 
     int min = 1;
     int max = 20;
     // these initializatoin might depcrated since 

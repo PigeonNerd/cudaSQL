@@ -370,6 +370,8 @@ __global__ void pnary_partition(int2* rel_a, int2* rel_b, int* lower_array, int*
 	int partition = blockIdx.x *  blockDim.x;
 	const int lower_bound = rel_a[blockIdx.x *  blockDim.x].x;
    	const int upper_bound = rel_a[(blockIdx.x + 1) * blockDim.x - 1].x;
+    __shared__ int lower;
+    __shared__ int upper;
     lower_array[2 * blockIdx.x] = M;
     lower_array[2 * blockIdx.x + 1] = 0;
     upper_array[2 * blockIdx.x] = -1;
@@ -378,12 +380,17 @@ __global__ void pnary_partition(int2* rel_a, int2* rel_b, int* lower_array, int*
     atomicMin(&out_bound[0], 100);
     search_lower(lower_bound, M, rel_b, &lower_array[2 * blockIdx.x]);
     search_upper(upper_bound, M, rel_b, &upper_array[2 * blockIdx.x]);
+    lower = lower_array[2 * blockIdx.x] < M? lower_array[2 * blockIdx.x]:lower_array[2 * blockIdx.x + 1];
+    upper = upper_array[2 * blockIdx.x] >= 0? upper_array[2 * blockIdx.x]:upper_array[2 * blockIdx.x + 1];
+    if( upper < lower) {
+        upper = M - 1;
+    }
+    out_bound[blockIdx.x] = blockDim.x * ( upper - lower + 1); 
     if(threadIndex == 0) {
-    //atomicMin(&ret_val_lower[0], 100);
     cuPrintf("lower_bound: %d ret: %d offset: %d\n", lower_bound, lower_array[2 * blockIdx.x], lower_array[2 * blockIdx.x + 1]);
     cuPrintf("upper_bound: %d ret: %d offset: %d\n", upper_bound, upper_array[2 * blockIdx.x], upper_array[2 * blockIdx.x + 1]);
+    cuPrintf("num result tuples: %d\n", out_bound[blockIdx.x]);    
     }
-    __syncthreads();
 	//prefix sum of outbound after finish all blocks of rel_a
 
 	//JOIN
@@ -422,8 +429,9 @@ void primitive_join(int N, int M) {
     thrust::sort(rel_b, rel_b + M, compare_int2());
 
     // prepare device buffers
-	 const int threadPerBlock = 10;
-	 const int blocks = (N + threadPerBlock - 1) / threadPerBlock;
+	const int threadPerBlock = 10;
+	const int blocks = (N + threadPerBlock - 1) / threadPerBlock;
+    printf("num blocks: %d\n", blocks);
     int2* dev_rel_a;
     int2* dev_rel_b;
     int* lower_array;
@@ -458,22 +466,6 @@ void primitive_join(int N, int M) {
     cudaPrintfInit();
     
     pnary_partition<<< blocks, threadPerBlock >>>(dev_rel_a, dev_rel_b, lower_array, upper_array ,out_bound, N, M);
-    
-    int   *ret_val = (int*)malloc(sizeof(int) * 2);
-    ret_val[0] = -1; // return value
-    ret_val[1] = 0; // offset
-    int   *dev_ret_val;
-    cudaMalloc((void**)&dev_ret_val, sizeof(int) * 2);
-    cudaMemcpy(dev_ret_val, ret_val, 2 * sizeof(int), cudaMemcpyHostToDevice);
-    p_ary_search<<<16, 64>>>(9, M, dev_rel_b, dev_ret_val);
-
-    cudaMemcpy(ret_val, dev_ret_val, 2 * sizeof(int), cudaMemcpyDeviceToHost);
-    int ret = ret_val[0];
-   // for(int i = 0 ; i < M; i ++) {
-   //   printf("[%d, %d]\n", rel_b[i].x, rel_b[i].y);
-
-   // }
-    printf("Ret Val %i    Offset %i\n", ret, ret_val[1]);
     
     cudaPrintfDisplay(stdout, true);
  	cudaPrintfEnd();
