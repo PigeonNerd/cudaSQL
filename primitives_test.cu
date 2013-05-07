@@ -218,37 +218,65 @@ primitive_select(int N, int inData[], int outData[]) {
     cudaFree(histogram);
 }
 
-struct bin_partitions {
-       int rel_a_low;
-       int rel_a_high;
-       int rel_b_low;
-       int rel_b_high;
-}
+__global__ void p_ary_search(int search, int array_length, int *arr, int *ret_val ) 
+{
+   const int num_threads = blockDim.x * gridDim.x;
+   const int thread = blockIdx.x * blockDim.x + threadIdx.x;
+   int set_size = array_length;
 
-__global__ int binary_search(int2* rel, const int bound, int low, int high){
-	int mid = (low + high) / 2;
-	if (rel[mid] == bound) {
-	   return mid;
-	} else if (rel[mid] < bound) {
-	   return binary_search(rel, bound, mid, high);
-	} else if (rel[mid] > bound) {
-	  return binary_search(rel, bound, 0, mid);
-	}
+   ret_val[0] = -1; // return value
+   ret_val[1] = 0;  // offset
 
-	return -1;
+   while(set_size != 0)
+   {
+      // Get the offset of the array, initially set to 0
+      int offset = ret_val[1];
+
+      // I think this is necessary in case a thread gets ahead, and resets offset before it's read
+      // This isn't necessary for the unit tests to pass, but I still like it here
+      __syncthreads();
+
+      // Get the next index to check
+      int index_to_check = get_index_to_check(thread, num_threads, set_size, offset);
+
+      // If the index is outside the bounds of the array then lets not check it
+      if (index_to_check < array_length)
+      {
+         // If the next index is outside the bounds of the array, then set it to maximum array size
+         int next_index_to_check = get_index_to_check(thread + 1, num_threads, set_size, offset);
+         if (next_index_to_check >= array_length)
+         {
+            next_index_to_check = array_length - 1;
+         }
+
+         // If we're at the mid section of the array reset the offset to this index
+         if (search > arr[index_to_check] && (search < arr[next_index_to_check])) 
+         {
+            ret_val[1] = index_to_check;
+         }
+         else if (search == arr[index_to_check]) 
+         {
+            // Set the return var if we hit it
+            ret_val[0] = index_to_check;
+         }
+      }
+
+      // Since this is a p-ary search divide by our total threads to get the next set size
+      set_size = set_size / num_threads;
+
+      // Sync up so no threads jump ahead and get a bad offset
+      __syncthreads();
+   }
 }
 
 __global__ void binary_partition(int2* rel_a, int2* rel_b, int* out_bound, int N, int M) {
 	int threadIndex =  threadIdx.x;
 	int partition = blockIdx.x *  blockDim.x;
 	const int lower_bound = rel_a[blockIdx.x *  blockDim.x];
-    	const int upper_bound = rel_a[(blockIdx.x + 1) * blockDim.x - 1];
+   	const int upper_bound = rel_a[(blockIdx.x + 1) * blockDim.x - 1];
 
 	int low_index = binary_search(rel_b, lower_bound, 0, M);
 	int high_index = binary_search(rel_b, upper_bound, 0, M);
-
-	bin_partition indeces = new bin_partitions(lower_bound, upper_bound, low_index, high_index);
-	out_bound[partition] = (indeces.upper_bound - indeces.lower_bound) * (indeces.high_index - indeces.low_index);
 
 	__syncthreads();
 
