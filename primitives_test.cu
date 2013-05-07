@@ -281,8 +281,8 @@ __global__ void binary_partition(int2* rel_a, int2* rel_b, int* out_bound, int N
 	const int lower_bound = rel_a[blockIdx.x *  blockDim.x].x;
    	const int upper_bound = rel_a[(blockIdx.x + 1) * blockDim.x - 1].x;
 
-	int low_index = binary_search(rel_b, lower_bound, 0, M);
-	int high_index = binary_search(rel_b, upper_bound, 0, M);
+	//int low_index = binary_search(rel_b, lower_bound, 0, M);
+	//int high_index = binary_search(rel_b, upper_bound, 0, M);
 
 	__syncthreads();
 
