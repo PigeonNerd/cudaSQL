@@ -225,13 +225,13 @@ __device__ int get_index_to_check(int thread, int num_threads, int set_size, int
 }
 
 
-__global__ void p_ary_search(int search, int array_length,  int *arr, int *ret_val ) {
+__global__ void p_ary_search(int search, int array_length,  int2 *arr, int *ret_val ) {
  
   const int num_threads = blockDim.x * gridDim.x;
   const int thread = blockIdx.x * blockDim.x + threadIdx.x;
   
-  //ret_val[0] = -1;
-  //ret_val[1] = offset;
+  ret_val[0] = -1;
+  ret_val[1] = 0;
  
   int set_size = array_length;
  
@@ -258,10 +258,10 @@ __global__ void p_ary_search(int search, int array_length,  int *arr, int *ret_v
       }
  
       // If we're at the mid section of the array reset the offset to this index
-      if (search > arr[index_to_check] && (search < arr[next_index_to_check])) {
+      if (search > arr[index_to_check].x && (search < arr[next_index_to_check].x)) {
         ret_val[1] = index_to_check;
       }
-      else if (search == arr[index_to_check]) {
+      else if (search == arr[index_to_check].x) {
         // Set the return var if we hit it
         ret_val[0] = index_to_check;
       } 
@@ -275,17 +275,12 @@ __global__ void p_ary_search(int search, int array_length,  int *arr, int *ret_v
   }
 }
 
-__global__ void binary_partition(int2* rel_a, int2* rel_b, int* out_bound, int N, int M) {
+__global__ void pnary_partition(int2* rel_a, int2* rel_b, int* out_bound, int N, int M) {
 	int threadIndex =  threadIdx.x;
 	int partition = blockIdx.x *  blockDim.x;
 	const int lower_bound = rel_a[blockIdx.x *  blockDim.x].x;
    	const int upper_bound = rel_a[(blockIdx.x + 1) * blockDim.x - 1].x;
-
-	//int low_index = binary_search(rel_b, lower_bound, 0, M);
-	//int high_index = binary_search(rel_b, upper_bound, 0, M);
-
 	__syncthreads();
-
 	//prefix sum of outbound after finish all blocks of rel_a
 
 
@@ -325,21 +320,36 @@ void primitive_join(int N, int M) {
     thrust::sort(rel_b, rel_b + M, compare_int2());
 
     // prepare device buffers
-	const int threadPerBlock = 512;
-	const int blocks = (N + threadPerBlock - 1) / threadPerBlock;
+	 const int threadPerBlock = 512;
+	 const int blocks = (N + threadPerBlock - 1) / threadPerBlock;
     int2* dev_rel_a;
     int2* dev_rel_b;
     int* out_bound;
     cudaMalloc((void**) &out_bound, sizeof(int) * blocks);
     cudaMalloc((void**) &dev_rel_a, sizeof(int2) * N);
     cudaMalloc((void**) &dev_rel_b, sizeof(int2) * M);
-	cudaMemcpy(dev_rel_a, rel_a, sizeof(int2) * N, cudaMemcpyHostToDevice);
-	cudaMemcpy(dev_rel_b, rel_b, sizeof(int2) * M, cudaMemcpyHostToDevice);
+	 cudaMemcpy(dev_rel_a, rel_a, sizeof(int2) * N, cudaMemcpyHostToDevice);
+	 cudaMemcpy(dev_rel_b, rel_b, sizeof(int2) * M, cudaMemcpyHostToDevice);
 
+<<<<<<< HEAD
 	//binary_partition(rel_a, rel_b, out_bound, N, M);
+=======
+>>>>>>> 8c29045a88c83a4315cb8ca18d64f7b58ebd07b5
 
+    int   *ret_val = (int*)malloc(sizeof(int) * 2);
+    ret_val[0] = -1; // return value
+    ret_val[1] = 0; // offset
+    int   *dev_ret_val;
+    cudaMalloc((void**)&dev_ret_val, sizeof(int) * 2);
+    p_ary_search<<<16, 64>>>(17, M, dev_rel_b, dev_ret_val);
+    cudaMemcpy(ret_val, dev_ret_val, 2 * sizeof(int), cudaMemcpyDeviceToHost);
+    int ret = ret_val[0];
+    for(int i = 0 ; i < M; i ++) {
+      printf("[%d, %d]\n", rel_b[i].x, rel_b[i].y);
+
+    }
+    printf("Ret Val %i    Offset %i\n", ret, ret_val[1]);
 }
-
 #define N   (1024*1024)
 #define FULL_DATA_SIZE   (N*20)
 
