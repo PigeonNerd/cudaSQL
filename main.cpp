@@ -19,15 +19,15 @@ bool validate(int N, int* sequential, int* target);
 float toBW(int bytes, float sec);
 
 int main(int argc, char** argv) {
-    test_select(); 
+    //test_select(); 
     test_join(); 
     return 0;
 }
 
 
 void test_join() {
-	int NUM_TUPPLES_A  =  20; 
-	int NUM_TUPPLES_B  =  20; 
+	int NUM_TUPPLES_A  =  40; 
+	int NUM_TUPPLES_B  =  40; 
     int min = 1;
     int max = 20;
     // these initializatoin might depcrated since 
@@ -49,12 +49,12 @@ void test_join() {
     for(int i = 0 ; i < NUM_TUPPLES_A; i ++) {
         rel_a[i][0] = min + (rand() % (int)(max - min + 1));
         rel_a[i][1] = min + (rand() % (int)(max - min + 1));
-        printf("a [%d , %d]\n", rel_a[i][0], rel_a[i][1]);
+        //printf("a [%d , %d]\n", rel_a[i][0], rel_a[i][1]);
     }
     for(int i = 0 ; i < NUM_TUPPLES_B; i ++) {
         rel_b[i][0] = min + (rand() % (int)(max - min + 1));
         rel_b[i][1] = min + (rand() % (int)(max - min + 1));
-        printf("b [%d , %d]\n", rel_b[i][0], rel_b[i][1]);
+        //printf("b [%d , %d]\n", rel_b[i][0], rel_b[i][1]);
     }
     primitive_join(NUM_TUPPLES_A, NUM_TUPPLES_B);
 }
