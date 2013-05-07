@@ -272,8 +272,8 @@ __global__ void p_ary_search(int search, int array_length, int *arr, int *ret_va
 __global__ void binary_partition(int2* rel_a, int2* rel_b, int* out_bound, int N, int M) {
 	int threadIndex =  threadIdx.x;
 	int partition = blockIdx.x *  blockDim.x;
-	const int lower_bound = rel_a[blockIdx.x *  blockDim.x];
-   	const int upper_bound = rel_a[(blockIdx.x + 1) * blockDim.x - 1];
+	const int lower_bound = rel_a[blockIdx.x *  blockDim.x].x;
+   	const int upper_bound = rel_a[(blockIdx.x + 1) * blockDim.x - 1].x;
 
 	int low_index = binary_search(rel_b, lower_bound, 0, M);
 	int high_index = binary_search(rel_b, upper_bound, 0, M);
@@ -330,7 +330,7 @@ void primitive_join(int N, int M) {
 	cudaMemcpy(dev_rel_a, rel_a, sizeof(int2) * N, cudaMemcpyHostToDevice);
 	cudaMemcpy(dev_rel_b, rel_b, sizeof(int2) * M, cudaMemcpyHostToDevice);
 
-	binary_partition(rel_a, rel_b, out_bound, N, M);
+	//binary_partition(rel_a, rel_b, out_bound, N, M);
 
 }
 
