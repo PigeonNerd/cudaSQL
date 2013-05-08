@@ -16,6 +16,7 @@
 using namespace std;
 extern float toBW(int bytes, float sec);
 
+
 //brute force find matching tuples
 void sequential_join(int2* rel_a, int2* rel_b, int rel_a_size, int rel_b_size, int3* out, int* numResult) {
    *numResult = 0;
