@@ -384,7 +384,7 @@ __global__ void pnary_partition(int2* rel_a, int2* rel_b, int* lower_array, int*
         upper = M - 1;
     }
     out_bound[blockIdx.x] = blockDim.x * ( upper - lower + 1); 
-    /*if(threadIndex == 0) {
+   /* if(threadIdx.x == 0) {
     cuPrintf("lower_bound: %d ret: %d offset: %d\n", lower_bound, lower_array[2 * blockIdx.x], lower_array[2 * blockIdx.x + 1]);
     cuPrintf("upper_bound: %d ret: %d offset: %d\n", upper_bound, upper_array[2 * blockIdx.x], upper_array[2 * blockIdx.x + 1]);
     cuPrintf("num result tuples: %f\n", out_bound[blockIdx.x]);    
@@ -429,13 +429,21 @@ __global__ brute_join( int3* out, int2* rel_a, int2* rel_b, int num, int N, int 
     sharedMemExclusiveScan(threadIndex, count, index, scratch, SCAN_BLOCK_DIM);
     for(int i = 0 ; i < num_right; i++ ) {
         if(left[threadIndex].x == right[i].x) {
-           // out[(int)out_bound[blockIdx.x] + index[threadIndex] + i].x = left[threadIndex].x;
-           // out[(int)out_bound[blockIdx.x] + index[threadIndex] + i].y = left[threadIndex].y;
-           // out[(int)out_bound[blockIdx.x] + index[threadIndex] + i].z = right[i].y;
-            if( threadIndex == 0) {
-                cuPrintf(" out index %d\n", (int)out_bound[blockIdx.x] + index[threadIndex] + i);
-            }
+           int j = (int)out_bound[blockIdx.x] + index[threadIndex] + i;
+           //cuPrintf("out index %d of %d\n", j, num);
+           if( j < num) {
+            out[j].x = left[threadIndex].x;
+            out[j].y = left[threadIndex].y;
+            out[j].z = right[i].y;
+           /* if( blockIdx.x == 0) {
+                cuPrintf("out index %d of %d\n", j, num);
+              }*/
+           } 
         }
+    }
+    if(threadIdx.x == 0) {
+        result_size[blockIdx.x] = count[511] + index[511];
+        cuPrintf("result size: %f\n",result_size[blockIdx.x]);
     }
 }
 
@@ -481,7 +489,7 @@ void primitive_join(int N, int M) {
     //float* out_bound_scan;
     float* result_size;
     int3* out;
-    cudaMalloc((void**) &out, sizeof(int) * M * N);
+    cudaMalloc((void**) &out, sizeof(int3) * N * 4);
     cudaMalloc((void**) &result_size, sizeof(float) * blocks);
     cudaMalloc((void**) &out_bound, sizeof(float) * blocks);
     //cudaMalloc((void**) &out_bound_scan, sizeof(float) * blocks);
@@ -517,10 +525,10 @@ void primitive_join(int N, int M) {
     thrust::exclusive_scan(dev_ptr1, dev_ptr1 + blocks, dev_ptr1);
     //prescanArray(out_bound, out_bound, blocks);
     //deallocBlockSums();
-    brute_join<<< blocks, threadPerBlock >>>(out, dev_rel_a, dev_rel_b, M * N, N, M, out_bound, result_size, lower_array, upper_array);
-    /*float* tmp_check = new float[blocks];
+    brute_join<<< blocks, threadPerBlock >>>(out, dev_rel_a, dev_rel_b,  N * 4 , N, M, out_bound, result_size, lower_array, upper_array);
+    float* tmp_check = new float[blocks];
 	cudaMemcpy(tmp_check, out_bound, sizeof(float) * blocks, cudaMemcpyDeviceToHost);
-    for(int i = 0 ; i < blocks; i ++) {
+   /* for(int i = 0 ; i < blocks; i ++) {
         printf("### %d ",(int)tmp_check[i]);
     }
     printf("\n");*/

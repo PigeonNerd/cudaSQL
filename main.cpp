@@ -5,7 +5,7 @@
 #include <cstdlib>
 #include "CycleTimer.h"
 #define magnitude 20 
-#define magnitude2 16 
+#define magnitude2 10 
 
 void printCudaInfo();
 void primitive_select(int N, int inData[], int outData[]);
