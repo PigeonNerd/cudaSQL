@@ -443,9 +443,27 @@ __global__ brute_join( int3* out, int2* rel_a, int2* rel_b, int num, int N, int 
     }
     if(threadIdx.x == 0) {
         result_size[blockIdx.x] = count[511] + index[511];
-        cuPrintf("result size: %f\n",result_size[blockIdx.x]);
+        //cuPrintf("result size: %f\n",result_size[blockIdx.x]);
     }
 }
+
+void
+__global__ join_coalesced(int3* result, int3* out, float* result_size, float* histogram, float* out_bound) {
+    int size = result_size[blockIdx.x];
+    int result_index;
+    int out_index;
+    for(int i = 0; i < size; i += 512) {
+        if(i + threadIdx.x < size) {
+           out_index = out_bound[blockIdx.x] + threadIdx.x + i;
+           result_index = histogram[blockIdx.x] + threadIdx.x + i;
+           result[result_index].x = out[out_index].x;
+           result[result_index].y = out[out_index].y;
+           result[result_index].z = out[out_index].z;
+        }
+        __syncthreads();
+    }
+}
+
 
 /*
     Implementation of JOIN operationi
@@ -488,9 +506,13 @@ void primitive_join(int N, int M) {
     float* out_bound;
     //float* out_bound_scan;
     float* result_size;
+    float* histogram;
     int3* out;
+    int3* result;
     cudaMalloc((void**) &out, sizeof(int3) * N * 4);
+    cudaMalloc((void**) &result, sizeof(int3) * N * 4);
     cudaMalloc((void**) &result_size, sizeof(float) * blocks);
+    cudaMalloc((void**) &histogram, sizeof(float) * blocks);
     cudaMalloc((void**) &out_bound, sizeof(float) * blocks);
     //cudaMalloc((void**) &out_bound_scan, sizeof(float) * blocks);
     cudaMalloc((void**) &lower_array, sizeof(int) * blocks * 2);
@@ -526,12 +548,25 @@ void primitive_join(int N, int M) {
     //prescanArray(out_bound, out_bound, blocks);
     //deallocBlockSums();
     brute_join<<< blocks, threadPerBlock >>>(out, dev_rel_a, dev_rel_b,  N * 4 , N, M, out_bound, result_size, lower_array, upper_array);
-    float* tmp_check = new float[blocks];
-	cudaMemcpy(tmp_check, out_bound, sizeof(float) * blocks, cudaMemcpyDeviceToHost);
-   /* for(int i = 0 ; i < blocks; i ++) {
-        printf("### %d ",(int)tmp_check[i]);
+
+    thrust::device_ptr<float> dev_ptr2(result_size);
+    thrust::device_ptr<float> dev_ptr3(histogram);
+    thrust::exclusive_scan(dev_ptr2, dev_ptr2 + blocks, dev_ptr3);
+    join_coalesced<<<blocks, threadPerBlock>>>(result, out, result_size, histogram, out_bound); 
+   
+    float* p = new float[blocks];
+    int numResult = 0; 
+	cudaMemcpy(p, result_size, sizeof(float) * blocks, cudaMemcpyDeviceToHost);
+    numResult += p[blocks-1];
+	cudaMemcpy(p, histogram, sizeof(float) * blocks, cudaMemcpyDeviceToHost);
+    numResult += p[blocks-1];
+
+    int3* tmp_check = new int3[numResult];
+	cudaMemcpy(tmp_check, result, sizeof(int3)*numResult, cudaMemcpyDeviceToHost);
+    for(int i = 0 ; i < numResult; i ++) {
+        printf("### [%d, %d, %d] ",tmp_check[i].x, tmp_check[i].y, tmp_check[i].z);
     }
-    printf("\n");*/
+    printf("\n");
 
     cudaPrintfDisplay(stdout, true);
  	cudaPrintfEnd();
@@ -543,6 +578,8 @@ void primitive_join(int N, int M) {
     //cudaFree(out_bound_scan);
     cudaFree(result_size);
     cudaFree(out);
+    cudaFree(histogram);
+    cudaFree(result);
   //  deallocBlockSums();
 }
 #define N   (1024*1024)
