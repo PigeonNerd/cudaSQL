@@ -20,7 +20,7 @@ bool validate(int N, int* sequential, int* target);
 float toBW(int bytes, float sec);
 
 int main(int argc, char** argv) {
-    //test_select(); 
+    test_select(); 
     test_join(); 
     return 0;
 }
@@ -75,7 +75,7 @@ void test_select() {
     }
     printf("%d\n", base);
 
-	int NUM_TUPPLES  =  20 * 1000 * 1000; 
+	int NUM_TUPPLES  = 20 * 1000 * 1000; 
 	int* relation = new int[NUM_TUPPLES];
 	int* cuda_result = new int[NUM_TUPPLES];
 	int* sequential_result = new int[NUM_TUPPLES];
@@ -85,9 +85,9 @@ void test_select() {
 	}
 	primitive_select(NUM_TUPPLES, relation, cuda_result);
     double startTime = CycleTimer::currentSeconds();
-    for(int i = 0 ; i < 10 ; i++) {
-        sequential_select(NUM_TUPPLES, relation, sequential_result); 
-    }
+    //for(int i = 0 ; i < 10 ; i++) {
+       sequential_select(NUM_TUPPLES, relation, sequential_result); 
+    //}
     double endTime = CycleTimer::currentSeconds();
     double overallDuration = endTime - startTime;
     printf("Sequential overall: %.3f ms\t\t[%.3f GB/s]\n", 1000.f * overallDuration, toBW( NUM_TUPPLES * sizeof(int) * 2, overallDuration));
@@ -117,7 +117,7 @@ bool validate(int N, int* sequential, int* target) {
             return false;
         }
     }
-    printf("PASS\n");
+    printf("SELECT PASS\n");
     return true;
 }
 

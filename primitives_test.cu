@@ -203,19 +203,19 @@ primitive_select(int N, int inData[], int outData[]) {
 	int* histogram;
 	int* out;
 	int* tmp = (int*)calloc(N, sizeof(int));
-    double startTime = CycleTimer::currentSeconds();
 	cudaMalloc((void**) &device_in, sizeof(int) * N);
 	cudaMalloc((void**) &device_result, sizeof(int) * N);
 	cudaMalloc((void**) &out, sizeof(int) * N);
 	cudaMalloc((void**) &result_size, sizeof(int) * blocks);
 	cudaMalloc((void**) &histogram, sizeof(int) * blocks);
+    double startTime = CycleTimer::currentSeconds();
 	cudaMemcpy(device_in, inData, sizeof(int) * N, cudaMemcpyHostToDevice);
 	cudaMemcpy(device_result, tmp, sizeof(int) * N, cudaMemcpyHostToDevice);
 	cudaMemcpy(out, tmp, sizeof(int) * N, cudaMemcpyHostToDevice);
 	cudaMemcpy(result_size, tmp, sizeof(int) * blocks, cudaMemcpyHostToDevice);
     cudaPrintfInit();
     double startTime_inner = CycleTimer::currentSeconds();
-	for(int i = 0 ; i < 10 ; i ++) {
+//	for(int i = 0 ; i < 10 ; i ++) {
     primitive_select_kernel<<<blocks, threadPerBlock>>>(N, device_in, device_result, result_size);
 
    // int test_result_size[blocks];
@@ -237,10 +237,11 @@ primitive_select(int N, int inData[], int outData[]) {
    // }
    // printf("\n");
 	coalesced<<<blocks, threadPerBlock>>>(N, device_result, result_size, histogram, out);
-    }
+  //  }
     double endTime_inner = CycleTimer::currentSeconds();
     cudaPrintfDisplay(stdout, true);
  	cudaPrintfEnd();
+
     cudaMemcpy(outData, out, sizeof(int) * N, cudaMemcpyDeviceToHost);
     double endTime = CycleTimer::currentSeconds();
 
@@ -365,7 +366,6 @@ __global__ void p_ary_search(int search, int array_length,  int2 *arr, int *ret_
 
   int set_size = array_length;
 
-
   while(set_size != 0){
     // Get the offset of the array, initially set to 0
     int offset = ret_val[1];
@@ -448,6 +448,7 @@ __global__ brute_join( int3* out, int2* rel_a, int2* rel_b, int num, int N, int 
     int partition = blockIdx.x * blockDim.x;
     // counter for each thread
     count[threadIndex] = 0;
+    index[threadIndex] = 0;
     // load two relation to the cache, make future access faster
     left[threadIndex] = rel_a[partition + threadIndex];
     for(int i = 0 ; i < num_right; i+= 512) {
@@ -464,17 +465,19 @@ __global__ brute_join( int3* out, int2* rel_a, int2* rel_b, int num, int N, int 
     }
     __syncthreads();
     sharedMemExclusiveScan(threadIndex, count, index, scratch, SCAN_BLOCK_DIM);
+    int current = 0;
     for(int i = 0 ; i < num_right; i++ ) {
         if(left[threadIndex].x == right[i].x) {
-           int j = (int)out_bound[blockIdx.x] + index[threadIndex] + i;
+           int j = (int)out_bound[blockIdx.x] + index[threadIndex] + current;
            //cuPrintf("out index %d of %d\n", j, num);
            if( j < num) {
             out[j].x = left[threadIndex].x;
             out[j].y = left[threadIndex].y;
             out[j].z = right[i].y;
-           /* if( blockIdx.x == 0) {
-                cuPrintf("out index %d of %d\n", j, num);
-              }*/
+            /*if( blockIdx.x == 3) {
+                cuPrintf("index %d =  %d + %d + %d\n", j, (int)out_bound[blockIdx.x], index[threadIndex], current);
+            }*/
+            current++;
            } 
         }
     }
@@ -493,6 +496,9 @@ __global__ join_coalesced(int3* result, int3* out, float* result_size, float* hi
         if(i + threadIdx.x < size) {
            out_index = out_bound[blockIdx.x] + threadIdx.x + i;
            result_index = histogram[blockIdx.x] + threadIdx.x + i;
+          /* if(blockIdx.x == 3) {
+                cuPrintf("## %d  = %d  + %d + %d\n", out_index, (int)out_bound[blockIdx.x], threadIdx.x, i);
+           }*/
            result[result_index].x = out[out_index].x;
            result[result_index].y = out[out_index].y;
            result[result_index].z = out[out_index].z;
@@ -559,31 +565,13 @@ void primitive_join(int N, int M) {
     cudaMalloc((void**) &upper_array, sizeof(int) * blocks * 2);
     cudaMalloc((void**) &dev_rel_a, sizeof(int2) * N);
     cudaMalloc((void**) &dev_rel_b, sizeof(int2) * M);
-	cudaMemcpy(dev_rel_a, rel_a, sizeof(int2) * N, cudaMemcpyHostToDevice);
+	
+    double startTime = CycleTimer::currentSeconds();
+    cudaMemcpy(dev_rel_a, rel_a, sizeof(int2) * N, cudaMemcpyHostToDevice);
 	cudaMemcpy(dev_rel_b, rel_b, sizeof(int2) * M, cudaMemcpyHostToDevice);
-
-    /*int counter = 0;
-    for(int i = 0 ; i < N; i ++) {
-        if( counter == threadPerBlock){
-            printf("----------------------------------\n");
-            counter = 0;
-        }
-            printf("a: [%d, %d]\n", rel_a[i].x, rel_a[i].y);
-        counter++;
-    }
-    printf("----------------------------------\n");
-    counter = 0;
-    for(int i = 0 ; i < M; i ++) {
-        if( counter == threadPerBlock){
-            printf("----------------------------------\n");
-            counter = 0;
-        }
-      printf("b: [%d, %d]\n", rel_b[i].x, rel_b[i].y);
-      counter++;
-    }*/
     cudaPrintfInit();
 
-   double startTime = CycleTimer::currentSeconds();
+    double startTime_inner = CycleTimer::currentSeconds();
 
     pnary_partition<<< blocks, threadPerBlock >>>(dev_rel_a, dev_rel_b, lower_array, upper_array ,out_bound, N, M);
     thrust::device_ptr<float> dev_ptr1(out_bound);
@@ -597,8 +585,8 @@ void primitive_join(int N, int M) {
     thrust::exclusive_scan(dev_ptr2, dev_ptr2 + blocks, dev_ptr3);
     join_coalesced<<<blocks, threadPerBlock>>>(result, out, result_size, histogram, out_bound); 
    
-   double endTime = CycleTimer::currentSeconds();
-   printf("time excution from cuda join %.3f ms\n",1000.f * (endTime  - startTime));
+   double endTime_inner = CycleTimer::currentSeconds();
+   printf("time excution from cuda join kernel %.3f ms\n",1000.f * (endTime_inner  - startTime_inner));
 
     float* p = new float[blocks];
     int numResult = 0; 
@@ -610,14 +598,10 @@ void primitive_join(int N, int M) {
 
     int3* tmp_check = new int3[numResult];
 	cudaMemcpy(tmp_check, result, sizeof(int3)*numResult, cudaMemcpyDeviceToHost);
+    double endTime = CycleTimer::currentSeconds();
+    printf("time excution from cuda join overall %.3f ms\n",1000.f * (endTime  - startTime));
+    
     validate_join(result_seq, seq_num, tmp_check, numResult);
-
-   /* int3* tmp_check = new int3[numResult];
-	cudaMemcpy(tmp_check, result, sizeof(int3)*numResult, cudaMemcpyDeviceToHost);
-    for(int i = 0 ; i < numResult; i ++) {
-        printf("### [%d, %d, %d] ",tmp_check[i].x, tmp_check[i].y, tmp_check[i].z);
-    }
-    printf("\n");*/
 
     cudaPrintfDisplay(stdout, true);
  	cudaPrintfEnd();
@@ -626,7 +610,6 @@ void primitive_join(int N, int M) {
     cudaFree(lower_array);
     cudaFree(upper_array);
     cudaFree(out_bound);
-    //cudaFree(out_bound_scan);
     cudaFree(result_size);
     cudaFree(out);
     cudaFree(histogram);
