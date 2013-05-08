@@ -4,7 +4,8 @@
 #include <string>
 #include <cstdlib>
 #include "CycleTimer.h"
-#define magnitude 10 
+#define magnitude 20 
+#define magnitude2 16 
 
 void printCudaInfo();
 void primitive_select(int N, int inData[], int outData[]);
@@ -27,11 +28,15 @@ int main(int argc, char** argv) {
 
 void test_join() {
     int base = 1;
+    int base2 = 1;
     for(int i = 0; i < magnitude; i ++) {
         base <<= 1; 
     }
-	int NUM_TUPPLES_A  =  20; 
-	int NUM_TUPPLES_B  =  20; 
+    for(int i = 0; i < magnitude2; i ++) {
+        base2 <<= 1; 
+    }
+	int NUM_TUPPLES_A  =  base; 
+	int NUM_TUPPLES_B  = base2; 
     int min = 1;
     int max = 20;
     // these initializatoin might depcrated since 

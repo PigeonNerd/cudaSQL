@@ -145,6 +145,7 @@ primitive_scan(int N, int inData[], int outData[]) {
     printf("\n");
     int y[] = {1, 2};
     printf("%d\n", y[(int)tmp[1]]);
+    deallocBlockSums();
 }
 
 
@@ -365,9 +366,7 @@ __global__ void p_ary_search(int search, int array_length,  int2 *arr, int *ret_
   }
 }
 
-__global__ void pnary_partition(int2* rel_a, int2* rel_b, int* lower_array, int* upper_array, int* out_bound, int N, int M) {
-	int threadIndex =  threadIdx.x;
-	int partition = blockIdx.x *  blockDim.x;
+__global__ void pnary_partition(int2* rel_a, int2* rel_b, int* lower_array, int* upper_array, float* out_bound, int N, int M) {
 	const int lower_bound = rel_a[blockIdx.x *  blockDim.x].x;
    	const int upper_bound = rel_a[(blockIdx.x + 1) * blockDim.x - 1].x;
     __shared__ int lower;
@@ -377,7 +376,6 @@ __global__ void pnary_partition(int2* rel_a, int2* rel_b, int* lower_array, int*
     upper_array[2 * blockIdx.x] = -1;
     upper_array[2 * blockIdx.x + 1] = 0;
     __syncthreads();
-    atomicMin(&out_bound[0], 100);
     search_lower(lower_bound, M, rel_b, &lower_array[2 * blockIdx.x]);
     search_upper(upper_bound, M, rel_b, &upper_array[2 * blockIdx.x]);
     lower = lower_array[2 * blockIdx.x] < M? lower_array[2 * blockIdx.x]:lower_array[2 * blockIdx.x + 1];
@@ -386,17 +384,60 @@ __global__ void pnary_partition(int2* rel_a, int2* rel_b, int* lower_array, int*
         upper = M - 1;
     }
     out_bound[blockIdx.x] = blockDim.x * ( upper - lower + 1); 
-    if(threadIndex == 0) {
+    /*if(threadIndex == 0) {
     cuPrintf("lower_bound: %d ret: %d offset: %d\n", lower_bound, lower_array[2 * blockIdx.x], lower_array[2 * blockIdx.x + 1]);
     cuPrintf("upper_bound: %d ret: %d offset: %d\n", upper_bound, upper_array[2 * blockIdx.x], upper_array[2 * blockIdx.x + 1]);
-    cuPrintf("num result tuples: %d\n", out_bound[blockIdx.x]);    
-    }
-	//prefix sum of outbound after finish all blocks of rel_a
-
-	//JOIN
-
+    cuPrintf("num result tuples: %f\n", out_bound[blockIdx.x]);    
+    }*/
 }
 
+void
+__global__ brute_join( int3* out, int2* rel_a, int2* rel_b, int num, int N, int M, float* out_bound, float* result_size, int* lower_array, int* upper_array ) {
+    __shared__ int2 left[512]; 
+    __shared__ int2 right[1024];
+    __shared__ uint count[512];
+    __shared__ uint index[512];
+    __shared__ uint scratch[1024];
+    int lower;
+    int upper;
+    int num_right;
+    lower = lower_array[2 * blockIdx.x] < M? lower_array[2 * blockIdx.x]:lower_array[2 * blockIdx.x + 1];
+    upper = upper_array[2 * blockIdx.x] >= 0? upper_array[2 * blockIdx.x]:upper_array[2 * blockIdx.x + 1];
+    if( upper < lower) {
+        upper = M - 1;
+    } 
+    num_right = upper - lower + 1;
+    int threadIndex =  threadIdx.x;
+    int partition = blockIdx.x * blockDim.x;
+    // counter for each thread
+    count[threadIndex] = 0;
+    // load two relation to the cache, make future access faster 
+    left[threadIndex] = rel_a[partition + threadIndex];
+    for(int i = 0 ; i < num_right; i+= 512) {
+        if(i + threadIndex < num_right) {
+            //cuPrintf("%d\n",lower + i + threadIndex);
+            right[i + threadIndex] = rel_b[lower + i + threadIndex];
+        }
+        __syncthreads();
+   }
+    for(int i = 0 ; i < num_right; i++ ) {
+        if(left[threadIndex].x == right[i].x) {
+            count[threadIndex] ++;
+        }
+    }
+    __syncthreads();
+    sharedMemExclusiveScan(threadIndex, count, index, scratch, SCAN_BLOCK_DIM);
+    for(int i = 0 ; i < num_right; i++ ) {
+        if(left[threadIndex].x == right[i].x) {
+           // out[(int)out_bound[blockIdx.x] + index[threadIndex] + i].x = left[threadIndex].x;
+           // out[(int)out_bound[blockIdx.x] + index[threadIndex] + i].y = left[threadIndex].y;
+           // out[(int)out_bound[blockIdx.x] + index[threadIndex] + i].z = right[i].y;
+            if( threadIndex == 0) {
+                cuPrintf(" out index %d\n", (int)out_bound[blockIdx.x] + index[threadIndex] + i);
+            }
+        }
+    }
+}
 
 /*
     Implementation of JOIN operationi
@@ -416,7 +457,7 @@ struct compare_int2 {
 void primitive_join(int N, int M) {
     // prepare host buffers
     int min = 1;
-    int max = 20;
+    int max = 1024;
     int2* rel_a = new int2[N];
     int2* rel_b = new int2[M];
     for(int i = 0; i < N; i ++) {
@@ -429,22 +470,29 @@ void primitive_join(int N, int M) {
     thrust::sort(rel_b, rel_b + M, compare_int2());
 
     // prepare device buffers
-	const int threadPerBlock = 10;
+	const int threadPerBlock = 512;
 	const int blocks = (N + threadPerBlock - 1) / threadPerBlock;
     printf("num blocks: %d\n", blocks);
     int2* dev_rel_a;
     int2* dev_rel_b;
     int* lower_array;
     int* upper_array;
-    int* out_bound;
-    cudaMalloc((void**) &out_bound, sizeof(int) * blocks);
+    float* out_bound;
+    //float* out_bound_scan;
+    float* result_size;
+    int3* out;
+    cudaMalloc((void**) &out, sizeof(int) * M * N);
+    cudaMalloc((void**) &result_size, sizeof(float) * blocks);
+    cudaMalloc((void**) &out_bound, sizeof(float) * blocks);
+    //cudaMalloc((void**) &out_bound_scan, sizeof(float) * blocks);
     cudaMalloc((void**) &lower_array, sizeof(int) * blocks * 2);
     cudaMalloc((void**) &upper_array, sizeof(int) * blocks * 2);
     cudaMalloc((void**) &dev_rel_a, sizeof(int2) * N);
     cudaMalloc((void**) &dev_rel_b, sizeof(int2) * M);
 	cudaMemcpy(dev_rel_a, rel_a, sizeof(int2) * N, cudaMemcpyHostToDevice);
 	cudaMemcpy(dev_rel_b, rel_b, sizeof(int2) * M, cudaMemcpyHostToDevice);
-    int counter = 0;
+    //preallocBlockSums(blocks);
+    /*int counter = 0;
     for(int i = 0 ; i < N; i ++) {
         if( counter == threadPerBlock){
             printf("----------------------------------\n");
@@ -462,13 +510,32 @@ void primitive_join(int N, int M) {
         }
       printf("b: [%d, %d]\n", rel_b[i].x, rel_b[i].y);
       counter++;
-    }
+    }*/
     cudaPrintfInit();
-    
     pnary_partition<<< blocks, threadPerBlock >>>(dev_rel_a, dev_rel_b, lower_array, upper_array ,out_bound, N, M);
-    
+    thrust::device_ptr<float> dev_ptr1(out_bound);
+    thrust::exclusive_scan(dev_ptr1, dev_ptr1 + blocks, dev_ptr1);
+    //prescanArray(out_bound, out_bound, blocks);
+    //deallocBlockSums();
+    brute_join<<< blocks, threadPerBlock >>>(out, dev_rel_a, dev_rel_b, M * N, N, M, out_bound, result_size, lower_array, upper_array);
+    /*float* tmp_check = new float[blocks];
+	cudaMemcpy(tmp_check, out_bound, sizeof(float) * blocks, cudaMemcpyDeviceToHost);
+    for(int i = 0 ; i < blocks; i ++) {
+        printf("### %d ",(int)tmp_check[i]);
+    }
+    printf("\n");*/
+
     cudaPrintfDisplay(stdout, true);
  	cudaPrintfEnd();
+    cudaFree(dev_rel_a);
+    cudaFree(dev_rel_b);
+    cudaFree(lower_array);
+    cudaFree(upper_array);
+    cudaFree(out_bound);
+    //cudaFree(out_bound_scan);
+    cudaFree(result_size);
+    cudaFree(out);
+  //  deallocBlockSums();
 }
 #define N   (1024*1024)
 #define FULL_DATA_SIZE   (N*20)
