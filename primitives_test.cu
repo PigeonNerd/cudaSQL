@@ -70,9 +70,8 @@ primitive_select_kernel(int N, int* tuples, int* result, int* result_size) {
 
 	int threadIndex =  threadIdx.x;
 	int partition = (blockIdx.y * gridDim.x + blockIdx.x) * blockDim.x;
-	cuPrintf("%d %d\n", blockIdx.y, gridDim.x);
     int blockIndex = blockIdx.y * gridDim.x + blockIdx.x;
-
+	//cuPrintf("%d %d %d\n", blockIdx.y, gridDim.x, blockIndex);
 	input[threadIndex] = 0;
 	output[threadIndex] = 0;
  	if ( partition + threadIndex < N ) {
@@ -81,7 +80,7 @@ primitive_select_kernel(int N, int* tuples, int* result, int* result_size) {
 	 __syncthreads();
 	 sharedMemExclusiveScan(threadIndex, input, output, scratch, SCAN_BLOCK_DIM);
 	if(input[threadIndex]){
-		 //atomicAdd(result_size + blockIdx.x, 1);
+		 //atomicAdd(result_size + blockIndex, 1);
     	 result[partition + output[threadIndex]] = tuples[partition + threadIndex];
  	}
 
@@ -108,7 +107,7 @@ primitive_select_kernel(int N, int* tuples, int* result, int* result_size) {
 __global__ void coalesced(int N, int* result, int* result_size, int* histogram, int* out) {
 	int threadIndex =  threadIdx.x;
 	int partition = (blockIdx.y * gridDim.x + blockIdx.x) * blockDim.x;
-  int blockIndex = blockIdx.y * gridDim.x + blockIdx.x;
+    int blockIndex = blockIdx.y * gridDim.x + blockIdx.x;
 
     if( threadIndex < result_size[blockIndex] ) {
 		  out[histogram[blockIndex] + threadIndex] = result[partition + threadIndex];
@@ -165,11 +164,10 @@ primitive_select(int N, int inData[], int outData[]) {
 	const int threadPerBlock = 512;
 	const int blocks = (N + threadPerBlock - 1) / threadPerBlock;
 
-  int rows = (blocks / GRID_DIM) == 0? 1 : (blocks / GRID_DIM);
+  int rows = (blocks / GRID_DIM) == 0? 1 : (blocks / GRID_DIM) + 1;
   int cols = (blocks / GRID_DIM) == 0? blocks : GRID_DIM;
   dim3 blockDim(threadPerBlock, 1);
-  dim3 gridDim(rows, cols);
-
+  dim3 gridDim(cols, rows);
 
 	const int blocksOfReulstSize = ( blocks + threadPerBlock - 1) / threadPerBlock;
     int totalBytes = N * sizeof(int) * 2;
@@ -197,12 +195,12 @@ primitive_select(int N, int inData[], int outData[]) {
 //	for(int i = 0 ; i < 10 ; i ++) {
     primitive_select_kernel<<<gridDim, blockDim>>>(N, device_in, device_result, result_size);
 
-   // int test_result_size[blocks];
-   // cudaMemcpy(test_result_size, result_size, sizeof(int)*blocks, cudaMemcpyDeviceToHost);
-   // for(int i = 0 ; i < blocks ; i ++) {
-   //     printf("%d, ", test_result_size[i]);
-   // }
-   // printf("\n");
+    int test_result_size[blocks];
+    cudaMemcpy(test_result_size, result_size, sizeof(int) * blocks, cudaMemcpyDeviceToHost);
+    for(int i = 0 ; i < blocks ; i ++) {
+       //printf("%d: %d, ",i ,test_result_size[i]);
+    }
+    printf("\n");
 	cudaThreadSynchronize();
 
     thrust::device_ptr<int> dev_ptr1(result_size);

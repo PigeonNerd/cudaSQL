@@ -75,7 +75,7 @@ void test_select() {
     }
     printf("%d\n", base);
 
-	int NUM_TUPPLES  = 20 * 1000 * 1000; 
+	int NUM_TUPPLES  = 4 * 20 * 1000 * 1000; 
 	int* relation = new int[NUM_TUPPLES];
 	int* cuda_result = new int[NUM_TUPPLES];
 	int* sequential_result = new int[NUM_TUPPLES];
