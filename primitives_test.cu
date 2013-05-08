@@ -16,6 +16,43 @@
 using namespace std;
 extern float toBW(int bytes, float sec);
 
+//brute force find matching tuples
+void sequential_join(int2* rel_a, int2* rel_b, int rel_a_size, int rel_b_size, int3* out, int* numResult) {
+   *numResult = 0;
+   double startTime = CycleTimer::currentSeconds();
+     for (int i = 0; i < rel_a_size; i++) {
+         for(int j = 0; j < rel_b_size; j ++ ) {
+            if(rel_a[i].x == rel_b[j].x) {
+                out[*numResult].x = rel_a[i].x;
+                out[*numResult].y = rel_a[i].y;
+                out[*numResult].z = rel_b[j].y;
+                (*numResult)++;
+            }
+            else if( rel_a[i].x < rel_b[j].x) {
+                break;
+            }
+        }
+     }
+   double endTime = CycleTimer::currentSeconds();
+   printf("time excution from sequential join %.3f ms\n",1000.f * (endTime  - startTime));
+   printf("sequential join produces %d tuples\n", *numResult);
+}
+
+void validate_join(int3* seq_out, int seq_num, int3* cuda_out, int cuda_num) {
+    if( seq_num != cuda_num ) {
+        printf("num of tuples seq(%d) != cuda(%d)", seq_num, cuda_num);
+        return;
+    }
+    for(int i = 0 ; i < cuda_num; i ++) {
+       if( seq_out[i].x != cuda_out[i].x ||seq_out[i].y != cuda_out[i].y || seq_out[i].z != cuda_out[i].z) {
+            printf("At line %d, not match FAIL\n",i);
+            printf("seq: [%d, %d, %d], GPU: [%d, %d, %d]\n",seq_out[i].x,seq_out[i].y, seq_out[i].z, cuda_out[i].x, cuda_out[i].y, cuda_out[i].z);
+            return;
+       }
+    }
+    printf("JOIN PASS !\n");
+}
+
 
 // This scan only work on small buffer, do not used on large array
 __global__ void prescan(int *g_odata, int *g_idata, int n){
@@ -383,13 +420,8 @@ __global__ void pnary_partition(int2* rel_a, int2* rel_b, int* lower_array, int*
     if( upper < lower) {
         upper = M - 1;
     }
-<<<<<<< HEAD
     out_bound[blockIdx.x] = blockDim.x * ( upper - lower + 1); 
    /* if(threadIdx.x == 0) {
-=======
-    out_bound[blockIdx.x] = blockDim.x * ( upper - lower + 1);
-    /*if(threadIndex == 0) {
->>>>>>> 9ed16abd841c97e91e65594bee0678f547981ea1
     cuPrintf("lower_bound: %d ret: %d offset: %d\n", lower_bound, lower_array[2 * blockIdx.x], lower_array[2 * blockIdx.x + 1]);
     cuPrintf("upper_bound: %d ret: %d offset: %d\n", upper_bound, upper_array[2 * blockIdx.x], upper_array[2 * blockIdx.x + 1]);
     cuPrintf("num result tuples: %f\n", out_bound[blockIdx.x]);
@@ -492,6 +524,7 @@ void primitive_join(int N, int M) {
     int2* rel_a = new int2[N];
     int2* rel_b = new int2[M];
     int3* result_seq = new int3[4 * N];
+    int seq_num;
     for(int i = 0; i < N; i ++) {
         rel_a[i] = make_int2(min + (rand() % (int)(max - min + 1)), min + (rand() % (int)(max - min + 1)) );
     }
@@ -501,7 +534,7 @@ void primitive_join(int N, int M) {
     thrust::sort(rel_a, rel_a + N, compare_int2());
     thrust::sort(rel_b, rel_b + M, compare_int2());
 
-    sequential_join(rel_a, rel_b, N, result_seq);
+    sequential_join(rel_a, rel_b, N, M, result_seq, &seq_num);
 
     // prepare device buffers
 	const int threadPerBlock = 512;
@@ -509,8 +542,6 @@ void primitive_join(int N, int M) {
     printf("num blocks: %d\n", blocks);
     int2* dev_rel_a;
     int2* dev_rel_b;
-    int2* dev_rel_a_seq;
-    int2* dev_rel_b_seq;
     int* lower_array;
     int* upper_array;
     float* out_bound;
@@ -528,12 +559,8 @@ void primitive_join(int N, int M) {
     cudaMalloc((void**) &upper_array, sizeof(int) * blocks * 2);
     cudaMalloc((void**) &dev_rel_a, sizeof(int2) * N);
     cudaMalloc((void**) &dev_rel_b, sizeof(int2) * M);
-    cudaMalloc((void**) &dev_rel_a_seq, sizeof(int2) * N);
-    cudaMalloc((void**) &dev_rel_b_seq, sizeof(int2) * M);
 	cudaMemcpy(dev_rel_a, rel_a, sizeof(int2) * N, cudaMemcpyHostToDevice);
 	cudaMemcpy(dev_rel_b, rel_b, sizeof(int2) * M, cudaMemcpyHostToDevice);
-	cudaMemcpy(dev_rel_a_seq, rel_a_seq, sizeof(int2) * N, cudaMemcpyHostToDevice);
-	cudaMemcpy(dev_rel_b_seq, rel_b_seq, sizeof(int2) * M, cudaMemcpyHostToDevice);
 
     /*int counter = 0;
     for(int i = 0 ; i < N; i ++) {
@@ -556,6 +583,7 @@ void primitive_join(int N, int M) {
     }*/
     cudaPrintfInit();
 
+   double startTime = CycleTimer::currentSeconds();
 
     pnary_partition<<< blocks, threadPerBlock >>>(dev_rel_a, dev_rel_b, lower_array, upper_array ,out_bound, N, M);
     thrust::device_ptr<float> dev_ptr1(out_bound);
@@ -569,24 +597,30 @@ void primitive_join(int N, int M) {
     thrust::exclusive_scan(dev_ptr2, dev_ptr2 + blocks, dev_ptr3);
     join_coalesced<<<blocks, threadPerBlock>>>(result, out, result_size, histogram, out_bound); 
    
+   double endTime = CycleTimer::currentSeconds();
+   printf("time excution from cuda join %.3f ms\n",1000.f * (endTime  - startTime));
+
     float* p = new float[blocks];
     int numResult = 0; 
 	cudaMemcpy(p, result_size, sizeof(float) * blocks, cudaMemcpyDeviceToHost);
     numResult += p[blocks-1];
 	cudaMemcpy(p, histogram, sizeof(float) * blocks, cudaMemcpyDeviceToHost);
     numResult += p[blocks-1];
+    printf("cuda produces %d tuples\n", numResult);
 
     int3* tmp_check = new int3[numResult];
+	cudaMemcpy(tmp_check, result, sizeof(int3)*numResult, cudaMemcpyDeviceToHost);
+    validate_join(result_seq, seq_num, tmp_check, numResult);
+
+   /* int3* tmp_check = new int3[numResult];
 	cudaMemcpy(tmp_check, result, sizeof(int3)*numResult, cudaMemcpyDeviceToHost);
     for(int i = 0 ; i < numResult; i ++) {
         printf("### [%d, %d, %d] ",tmp_check[i].x, tmp_check[i].y, tmp_check[i].z);
     }
-    printf("\n");
+    printf("\n");*/
 
     cudaPrintfDisplay(stdout, true);
  	cudaPrintfEnd();
-    cudaFree(dev_rel_a_seq);
-    cudaFree(dev_rel_b_seq);
     cudaFree(dev_rel_a);
     cudaFree(dev_rel_b);
     cudaFree(lower_array);
@@ -600,28 +634,7 @@ void primitive_join(int N, int M) {
   //  deallocBlockSums();
 }
 
-void sequential_join(int2* rel_a, int2* rel_b, int rel_a_size, int3* out) {
-     int out_index = 0;
-     for (int i = 0; i < rel_a_size; i++) {
-     	out_index = find_matches(rel_a, rel_b, i, out, out_index);
-     }
-     return;
-}
 
-//brute force find matching tuples
-int find_matches(int2* tuple, int2* rel, int a_index, int3* out, int current) {
-    int new_index = current;
-    int rel_index = 0;
-
-    while (rel[rel_index].x <= tuple[a_index].x) {
-    	  out[current].x = tuple[a_index].x;
-	  out[current].y = tuple[a_index].y;
-	  out[current].z = rel[rel_index].y;
-	  rel_index++;
-	  new_index++;
-    }
-    return new_index;
-}
 
 #define N   (1024*1024)
 #define FULL_DATA_SIZE   (N*20)
