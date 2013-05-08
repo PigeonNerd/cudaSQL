@@ -66,7 +66,7 @@ primitive_select_kernel(int N, int* tuples, int* result, int* result_size) {
 	__shared__ uint scratch[2 * SCAN_BLOCK_DIM];
 
 	int threadIndex =  threadIdx.x;
-	int partition = blockIdx.x *  blockDim.x;
+	int partition = (blockIdx.y * gridDim.x + blockIdx.x) * blockDim.x;
 	//cuPrintf("%d\n", threadIndex);
 	input[threadIndex] = 0;
 	output[threadIndex] = 0;
