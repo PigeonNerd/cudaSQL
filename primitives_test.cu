@@ -112,8 +112,7 @@ __global__ void coalesced(int N, int* result, int* result_size, int* histogram, 
     This is a sample of how to use scanLargeArray
     from Nvidia SDK
 */
-void
-primitive_scan(int N, int inData[], int outData[]) {
+void primitive_scan(int N, int inData[], int outData[]) {
 	int large_num = 39063;
     float tmp[large_num];
     float* large_in;
@@ -220,10 +219,11 @@ primitive_select(int N, int inData[], int outData[]) {
 }
 
 __device__ int get_index_to_check(int thread, int num_threads, int set_size, int offset) {
- 
+
   // Integer division trick to round up
   return (((set_size + num_threads) / num_threads) * thread) + offset;
 }
+
 __device__ void search_lower(int search, int array_length,  int2 *arr, int *ret_val ) {
   const int num_threads = blockDim.x;
   const int thread = threadIdx.x;
@@ -231,24 +231,24 @@ __device__ void search_lower(int search, int array_length,  int2 *arr, int *ret_
   while(set_size != 0){
     // Get the offset of the array, initially set to 0
     int offset = ret_val[1];
-    
+
     // I think this is necessary in case a thread gets ahead, and resets offset before it's read
     // This isn't necessary for the unit tests to pass, but I still like it here
-    __syncthreads();  
- 
+    __syncthreads();
+
     // Get the next index to check
     int index_to_check = get_index_to_check(thread, num_threads, set_size, offset);
- 
+
     // If the index is outside the bounds of the array then lets not check it
     if (index_to_check < array_length){
       // If the next index is outside the bounds of the array, then set it to maximum array size
       int next_index_to_check = get_index_to_check(thread + 1, num_threads, set_size, offset);
- 
+
       if (next_index_to_check >= array_length){
         next_index_to_check = array_length - 1;
       }
-   /* if( search == 5 && blockIdx.x == 1) { 
-        cuPrintf("index to check arr[%d] = %d , arr[%d] = %d \n", index_to_check,arr[index_to_check].x, next_index_to_check, arr[next_index_to_check].x); 
+   /* if( search == 5 && blockIdx.x == 1) {
+        cuPrintf("index to check arr[%d] = %d , arr[%d] = %d \n", index_to_check,arr[index_to_check].x, next_index_to_check, arr[next_index_to_check].x);
     }*/
 
       // If we're at the mid section of the array reset the offset to this index
@@ -261,12 +261,12 @@ __device__ void search_lower(int search, int array_length,  int2 *arr, int *ret_
             cuPrintf("find it at %d %d\n", index_to_check, ret_val[0]);
         }*/
         atomicMin(&ret_val[0], index_to_check);
-      } 
+      }
     }
- 
+
     // Since this is a p-ary search divide by our total threads to get the next set size
     set_size = set_size / num_threads;
-    
+
     // Sync up so no threads jump ahead and get a bad offset
     __syncthreads();
   }
@@ -279,24 +279,24 @@ __device__ void search_upper(int search, int array_length,  int2 *arr, int *ret_
   while(set_size != 0){
     // Get the offset of the array, initially set to 0
     int offset = ret_val[1];
-    
+
     // I think this is necessary in case a thread gets ahead, and resets offset before it's read
     // This isn't necessary for the unit tests to pass, but I still like it here
-    __syncthreads();  
- 
+    __syncthreads();
+
     // Get the next index to check
     int index_to_check = get_index_to_check(thread, num_threads, set_size, offset);
- 
+
     // If the index is outside the bounds of the array then lets not check it
     if (index_to_check < array_length){
       // If the next index is outside the bounds of the array, then set it to maximum array size
       int next_index_to_check = get_index_to_check(thread + 1, num_threads, set_size, offset);
- 
+
       if (next_index_to_check >= array_length){
         next_index_to_check = array_length - 1;
       }
-   /* if( search == 5 && blockIdx.x == 1) { 
-        cuPrintf("index to check arr[%d] = %d , arr[%d] = %d \n", index_to_check,arr[index_to_check].x, next_index_to_check, arr[next_index_to_check].x); 
+   /* if( search == 5 && blockIdx.x == 1) {
+        cuPrintf("index to check arr[%d] = %d , arr[%d] = %d \n", index_to_check,arr[index_to_check].x, next_index_to_check, arr[next_index_to_check].x);
     }*/
 
       // If we're at the mid section of the array reset the offset to this index
@@ -309,45 +309,45 @@ __device__ void search_upper(int search, int array_length,  int2 *arr, int *ret_
             cuPrintf("find it at %d %d\n", index_to_check, ret_val[0]);
         }*/
         atomicMax(&ret_val[0], index_to_check);
-      } 
+      }
     }
- 
+
     // Since this is a p-ary search divide by our total threads to get the next set size
     set_size = set_size / num_threads;
-    
+
     // Sync up so no threads jump ahead and get a bad offset
     __syncthreads();
   }
 }
 __global__ void p_ary_search(int search, int array_length,  int2 *arr, int *ret_val ) {
- 
+
   const int num_threads = blockDim.x * gridDim.x;
   const int thread = blockIdx.x * blockDim.x + threadIdx.x;
   //ret_val[0] = -1;
   //ret_val[1] = 0;
- 
+
   int set_size = array_length;
- 
-  
+
+
   while(set_size != 0){
     // Get the offset of the array, initially set to 0
     int offset = ret_val[1];
-    
+
     // I think this is necessary in case a thread gets ahead, and resets offset before it's read
     // This isn't necessary for the unit tests to pass, but I still like it here
-    __syncthreads();  
- 
+    __syncthreads();
+
     // Get the next index to check
     int index_to_check = get_index_to_check(thread, num_threads, set_size, offset);
     // If the index is outside the bounds of the array then lets not check it
     if (index_to_check < array_length){
       // If the next index is outside the bounds of the array, then set it to maximum array size
       int next_index_to_check = get_index_to_check(thread + 1, num_threads, set_size, offset);
- 
+
       if (next_index_to_check >= array_length){
         next_index_to_check = array_length - 1;
       }
- 
+
       // If we're at the mid section of the array reset the offset to this index
       if (search > arr[index_to_check].x && (search < arr[next_index_to_check].x)) {
         ret_val[1] = index_to_check;
@@ -355,12 +355,12 @@ __global__ void p_ary_search(int search, int array_length,  int2 *arr, int *ret_
       else if (search == arr[index_to_check].x) {
         // Set the return var if we hit it
         ret_val[0] = index_to_check;
-      } 
+      }
     }
- 
+
     // Since this is a p-ary search divide by our total threads to get the next set size
     set_size = set_size / num_threads;
-    
+
     // Sync up so no threads jump ahead and get a bad offset
     __syncthreads();
   }
@@ -383,17 +383,22 @@ __global__ void pnary_partition(int2* rel_a, int2* rel_b, int* lower_array, int*
     if( upper < lower) {
         upper = M - 1;
     }
+<<<<<<< HEAD
     out_bound[blockIdx.x] = blockDim.x * ( upper - lower + 1); 
    /* if(threadIdx.x == 0) {
+=======
+    out_bound[blockIdx.x] = blockDim.x * ( upper - lower + 1);
+    /*if(threadIndex == 0) {
+>>>>>>> 9ed16abd841c97e91e65594bee0678f547981ea1
     cuPrintf("lower_bound: %d ret: %d offset: %d\n", lower_bound, lower_array[2 * blockIdx.x], lower_array[2 * blockIdx.x + 1]);
     cuPrintf("upper_bound: %d ret: %d offset: %d\n", upper_bound, upper_array[2 * blockIdx.x], upper_array[2 * blockIdx.x + 1]);
-    cuPrintf("num result tuples: %f\n", out_bound[blockIdx.x]);    
+    cuPrintf("num result tuples: %f\n", out_bound[blockIdx.x]);
     }*/
 }
 
 void
 __global__ brute_join( int3* out, int2* rel_a, int2* rel_b, int num, int N, int M, float* out_bound, float* result_size, int* lower_array, int* upper_array ) {
-    __shared__ int2 left[512]; 
+    __shared__ int2 left[512];
     __shared__ int2 right[1024];
     __shared__ uint count[512];
     __shared__ uint index[512];
@@ -405,13 +410,13 @@ __global__ brute_join( int3* out, int2* rel_a, int2* rel_b, int num, int N, int 
     upper = upper_array[2 * blockIdx.x] >= 0? upper_array[2 * blockIdx.x]:upper_array[2 * blockIdx.x + 1];
     if( upper < lower) {
         upper = M - 1;
-    } 
+    }
     num_right = upper - lower + 1;
     int threadIndex =  threadIdx.x;
     int partition = blockIdx.x * blockDim.x;
     // counter for each thread
     count[threadIndex] = 0;
-    // load two relation to the cache, make future access faster 
+    // load two relation to the cache, make future access faster
     left[threadIndex] = rel_a[partition + threadIndex];
     for(int i = 0 ; i < num_right; i+= 512) {
         if(i + threadIndex < num_right) {
@@ -486,6 +491,7 @@ void primitive_join(int N, int M) {
     int max = 1024;
     int2* rel_a = new int2[N];
     int2* rel_b = new int2[M];
+    int3* result_seq = new int3[4 * N];
     for(int i = 0; i < N; i ++) {
         rel_a[i] = make_int2(min + (rand() % (int)(max - min + 1)), min + (rand() % (int)(max - min + 1)) );
     }
@@ -495,12 +501,16 @@ void primitive_join(int N, int M) {
     thrust::sort(rel_a, rel_a + N, compare_int2());
     thrust::sort(rel_b, rel_b + M, compare_int2());
 
+    sequential_join(rel_a, rel_b, N, result_seq);
+
     // prepare device buffers
 	const int threadPerBlock = 512;
 	const int blocks = (N + threadPerBlock - 1) / threadPerBlock;
     printf("num blocks: %d\n", blocks);
     int2* dev_rel_a;
     int2* dev_rel_b;
+    int2* dev_rel_a_seq;
+    int2* dev_rel_b_seq;
     int* lower_array;
     int* upper_array;
     float* out_bound;
@@ -514,14 +524,17 @@ void primitive_join(int N, int M) {
     cudaMalloc((void**) &result_size, sizeof(float) * blocks);
     cudaMalloc((void**) &histogram, sizeof(float) * blocks);
     cudaMalloc((void**) &out_bound, sizeof(float) * blocks);
-    //cudaMalloc((void**) &out_bound_scan, sizeof(float) * blocks);
     cudaMalloc((void**) &lower_array, sizeof(int) * blocks * 2);
     cudaMalloc((void**) &upper_array, sizeof(int) * blocks * 2);
     cudaMalloc((void**) &dev_rel_a, sizeof(int2) * N);
     cudaMalloc((void**) &dev_rel_b, sizeof(int2) * M);
+    cudaMalloc((void**) &dev_rel_a_seq, sizeof(int2) * N);
+    cudaMalloc((void**) &dev_rel_b_seq, sizeof(int2) * M);
 	cudaMemcpy(dev_rel_a, rel_a, sizeof(int2) * N, cudaMemcpyHostToDevice);
 	cudaMemcpy(dev_rel_b, rel_b, sizeof(int2) * M, cudaMemcpyHostToDevice);
-    //preallocBlockSums(blocks);
+	cudaMemcpy(dev_rel_a_seq, rel_a_seq, sizeof(int2) * N, cudaMemcpyHostToDevice);
+	cudaMemcpy(dev_rel_b_seq, rel_b_seq, sizeof(int2) * M, cudaMemcpyHostToDevice);
+
     /*int counter = 0;
     for(int i = 0 ; i < N; i ++) {
         if( counter == threadPerBlock){
@@ -542,6 +555,8 @@ void primitive_join(int N, int M) {
       counter++;
     }*/
     cudaPrintfInit();
+
+
     pnary_partition<<< blocks, threadPerBlock >>>(dev_rel_a, dev_rel_b, lower_array, upper_array ,out_bound, N, M);
     thrust::device_ptr<float> dev_ptr1(out_bound);
     thrust::exclusive_scan(dev_ptr1, dev_ptr1 + blocks, dev_ptr1);
@@ -570,6 +585,8 @@ void primitive_join(int N, int M) {
 
     cudaPrintfDisplay(stdout, true);
  	cudaPrintfEnd();
+    cudaFree(dev_rel_a_seq);
+    cudaFree(dev_rel_b_seq);
     cudaFree(dev_rel_a);
     cudaFree(dev_rel_b);
     cudaFree(lower_array);
@@ -582,6 +599,30 @@ void primitive_join(int N, int M) {
     cudaFree(result);
   //  deallocBlockSums();
 }
+
+void sequential_join(int2* rel_a, int2* rel_b, int rel_a_size, int3* out) {
+     int out_index = 0;
+     for (int i = 0; i < rel_a_size; i++) {
+     	out_index = find_matches(rel_a, rel_b, i, out, out_index);
+     }
+     return;
+}
+
+//brute force find matching tuples
+int find_matches(int2* tuple, int2* rel, int a_index, int3* out, int current) {
+    int new_index = current;
+    int rel_index = 0;
+
+    while (rel[rel_index].x <= tuple[a_index].x) {
+    	  out[current].x = tuple[a_index].x;
+	  out[current].y = tuple[a_index].y;
+	  out[current].z = rel[rel_index].y;
+	  rel_index++;
+	  new_index++;
+    }
+    return new_index;
+}
+
 #define N   (1024*1024)
 #define FULL_DATA_SIZE   (N*20)
 
