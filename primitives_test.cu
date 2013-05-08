@@ -67,7 +67,7 @@ primitive_select_kernel(int N, int* tuples, int* result, int* result_size) {
 
 	int threadIndex =  threadIdx.x;
 	int partition = (blockIdx.y * gridDim.x + blockIdx.x) * blockDim.x;
-	//cuPrintf("%d\n", threadIndex);
+	cuPrintf("%d %d\n", blockIdx.y, gridDim.x);
 	input[threadIndex] = 0;
 	output[threadIndex] = 0;
  	if ( partition + threadIndex < N ) {
