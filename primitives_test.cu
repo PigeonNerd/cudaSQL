@@ -146,23 +146,21 @@ void primitive_scan(int N, int inData[], int outData[]) {
         tmp[i] = 1.0;
     }
 	cudaMemcpy(large_in, tmp, sizeof(float) * large_num, cudaMemcpyHostToDevice);
-
     startTime = CycleTimer::currentSeconds();
-
+    thrust::device_ptr<float> dev_ptr1(large_in);
+    thrust::device_ptr<float> dev_ptr2(large_out);
+    thrust::exclusive_scan(dev_ptr1, dev_ptr1 + large_num, dev_ptr2);
+    endTime = CycleTimer::currentSeconds();
+   printf("time excution from thrust scan %.3f ms\n",1000.f * (endTime  - startTime));
+    startTime = CycleTimer::currentSeconds();
     scan_up<<<2, 512>>>(large_in, large_out);
     scan_sum<<<1, 1>>>(large_in, large_out);
     scan_down<<<2, 512>>>(large_in, large_out);
-
    //  preallocBlockSums(large_num);
    //  prescanArray(large_out, large_in, large_num, stream0);
-   //  endTime = CycleTimer::currentSeconds();
-   // printf("time excution from large array scan %.3f ms\n", 1000.f * (endTime  - startTime));
-   // startTime = CycleTimer::currentSeconds();
-   // thrust::device_ptr<float> dev_ptr1(large_in);
-   // thrust::device_ptr<float> dev_ptr2(large_out);
-   // thrust::exclusive_scan(dev_ptr1, dev_ptr1 + large_num, dev_ptr2);
     endTime = CycleTimer::currentSeconds();
-   printf("time excution from thrust scan %.3f ms\n",1000.f * (endTime  - startTime));
+    printf("time excution from parallel array scan %.3f ms\n", 1000.f * (endTime  - startTime));
+
     cudaMemcpy(tmp, large_out, sizeof(float) * large_num, cudaMemcpyDeviceToHost);
     for(int i = 0; i < large_num; i ++) {
         printf("%f ", tmp[i]);
