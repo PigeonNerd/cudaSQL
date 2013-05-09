@@ -62,15 +62,19 @@ void validate_join(int3* seq_out, int seq_num, int3* cuda_out, int cuda_num) {
     and get the cout of tuples of each block
 */
 __global__ void
-primitive_select_kernel(int N, int* tuples, int* result, int* result_size) {
+primitive_select_kernel(int N, int blocks, int* tuples, int* result, int* result_size) {
 
 	__shared__ uint input[SCAN_BLOCK_DIM];
 	__shared__ uint output[SCAN_BLOCK_DIM];
 	__shared__ uint scratch[2 * SCAN_BLOCK_DIM];
-
 	int threadIndex =  threadIdx.x;
 	int partition = (blockIdx.y * gridDim.x + blockIdx.x) * blockDim.x;
     int blockIndex = blockIdx.y * gridDim.x + blockIdx.x;
+
+    if (partition + threadIndex >= N || blockIndex >= blocks) {
+        return;
+    }
+
 	//cuPrintf("%d %d %d\n", blockIdx.y, gridDim.x, blockIndex);
 	input[threadIndex] = 0;
 	output[threadIndex] = 0;
@@ -83,21 +87,19 @@ primitive_select_kernel(int N, int* tuples, int* result, int* result_size) {
 		 //atomicAdd(result_size + blockIndex, 1);
     	 result[partition + output[threadIndex]] = tuples[partition + threadIndex];
  	}
-
-      for(int offset = blockDim.x / 2; offset > 0; offset >>= 1) {
+    for(int offset = blockDim.x / 2; offset > 0; offset >>= 1) {
         if(threadIdx.x < offset) {
           // add a partial sum upstream to our own
           input[threadIdx.x] += input[threadIdx.x + offset];
-        }
+     }
 
         // wait until all threads in the block have
         // updated their partial sums
         __syncthreads();
       }
-
       // thread 0 writes the final result
       if(threadIdx.x == 0) {
-        result_size[blockIndex] = input[0];
+          result_size[blockIndex] = input[0];
       }
 }
 
@@ -109,7 +111,14 @@ __global__ void coalesced(int N, int* result, int* result_size, int* histogram, 
 	int partition = (blockIdx.y * gridDim.x + blockIdx.x) * blockDim.x;
     int blockIndex = blockIdx.y * gridDim.x + blockIdx.x;
 
-    if( threadIndex < result_size[blockIndex] ) {
+    if (partition + threadIndex >= N) {
+        return;
+    }
+
+    if( threadIndex < result_size[blockIndex]) {
+          /*if(histogram[blockIndex] + threadIndex == 0) {
+            cuPrintf("%d %d\n", blockIndex, threadIndex);
+          }*/
 		  out[histogram[blockIndex] + threadIndex] = result[partition + threadIndex];
 	   }
 	__syncthreads();
@@ -168,7 +177,7 @@ primitive_select(int N, int inData[], int outData[]) {
   int cols = (blocks / GRID_DIM) == 0? blocks : GRID_DIM;
   dim3 blockDim(threadPerBlock, 1);
   dim3 gridDim(cols, rows);
-
+    printf("rows %d cols: %d\n", rows, cols);
 	const int blocksOfReulstSize = ( blocks + threadPerBlock - 1) / threadPerBlock;
     int totalBytes = N * sizeof(int) * 2;
     printf("Num of tuples %d\n", N);
@@ -193,25 +202,25 @@ primitive_select(int N, int inData[], int outData[]) {
     cudaPrintfInit();
     double startTime_inner = CycleTimer::currentSeconds();
 //	for(int i = 0 ; i < 10 ; i ++) {
-    primitive_select_kernel<<<gridDim, blockDim>>>(N, device_in, device_result, result_size);
+    primitive_select_kernel<<<gridDim, blockDim>>>(N, blocks, device_in, device_result, result_size);
 
-    int test_result_size[blocks];
+   /* int test_result_size[blocks];
     cudaMemcpy(test_result_size, result_size, sizeof(int) * blocks, cudaMemcpyDeviceToHost);
     for(int i = 0 ; i < blocks ; i ++) {
-       //printf("%d: %d, ",i ,test_result_size[i]);
+       printf("%d: %d, ",i ,test_result_size[i]);
     }
     printf("\n");
-	cudaThreadSynchronize();
+	cudaThreadSynchronize();*/
 
     thrust::device_ptr<int> dev_ptr1(result_size);
     thrust::device_ptr<int> dev_ptr2(histogram);
     thrust::exclusive_scan(dev_ptr1, dev_ptr1 + blocks, dev_ptr2);
-   // int test_histgram[blocks];
-   // cudaMemcpy(test_histgram, histogram, sizeof(int)*blocks, cudaMemcpyDeviceToHost);
-   // for(int i = 0 ; i < blocks; i ++) {
-   //     printf("%d, ", test_histgram[i]);
-   // }
-   // printf("\n");
+   /* int test_histgram[blocks];
+    cudaMemcpy(test_histgram, histogram, sizeof(int)*blocks, cudaMemcpyDeviceToHost);
+    for(int i = 0 ; i < blocks; i ++) {
+        printf("%d, ", test_histgram[i]);
+    }
+    printf("\n");*/
 	coalesced<<<gridDim, blockDim>>>(N, device_result, result_size, histogram, out);
   //  }
     double endTime_inner = CycleTimer::currentSeconds();
