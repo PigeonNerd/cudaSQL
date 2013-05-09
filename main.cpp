@@ -22,7 +22,7 @@ float toBW(int bytes, float sec);
 
 int main(int argc, char** argv) {
     test_select();
-    //primitive_scan(0, NULL, NULL);
+    primitive_scan(0, NULL, NULL);
     //test_join(); 
     return 0;
 }
