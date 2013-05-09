@@ -161,7 +161,6 @@ void primitive_scan(int N, int inData[], int outData[]) {
 	cudaMemcpy(large_in, tmp, sizeof(float) * large_num, cudaMemcpyHostToDevice);
 
     startTime = CycleTimer::currentSeconds();
-    small_scan<<< 1, 512 >>>(large_out, large_in);
    //  preallocBlockSums(large_num);
    //  prescanArray(large_out, large_in, large_num, stream0);
    //  endTime = CycleTimer::currentSeconds();
