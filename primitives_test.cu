@@ -287,7 +287,7 @@ primitive_select_stream(int N, int inData[], int outData[]) {
     cudaPrintfInit();
     double startTime_inner = CycleTimer::currentSeconds();
 //  for(int i = 0 ; i < 10 ; i ++) {
-    primitive_select_kernel<<<gridDim, blockDim>>>(N, blocks, device_in, device_result, result_size);
+    primitive_select_kernel<<<gridDim, blockDim, 0, stream0 >>>(N, blocks, device_in, device_result, result_size);
 
    /* int test_result_size[blocks];
     cudaMemcpy(test_result_size, result_size, sizeof(int) * blocks, cudaMemcpyDeviceToHost);
@@ -310,8 +310,9 @@ primitive_select_stream(int N, int inData[], int outData[]) {
         printf("%d, ", test_histgram[i]);
     }
     printf("\n");*/
-  coalesced<<<gridDim, blockDim>>>(N, device_result, result_size, histogram, out);
+  coalesced<<<gridDim, blockDim, 0,stream0>>>(N, device_result, result_size, histogram, out);
   //  }
+  cudaStreamSynchronize( stream0 );
     double endTime_inner = CycleTimer::currentSeconds();
     cudaPrintfDisplay(stdout, true);
     cudaPrintfEnd();
