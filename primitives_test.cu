@@ -15,7 +15,6 @@
 #include "book.h"
 
 #define GRID_DIM 65535
-#define BLOCK_SIZE 512
 
 using namespace std;
 extern float toBW(int bytes, float sec);
@@ -126,56 +125,6 @@ __global__ void coalesced(int N, int* result, float* result_size, float* histogr
 	__syncthreads();
 }
 
-
-__global__ void small_scan(float * input, float * blockSum, int len) {
-    __shared__ float scan_array[2 * BLOCK_SIZE];
-    int index, stride;  
-  
-    int i = 2 * blockIdx.x * BLOCK_SIZE + threadIdx.x;
-    
-    if (i < len) {
-        scan_array[threadIdx.x] = input[i];
-    } else {
-        scan_array[threadIdx.x] = 0;
-    }
-    
-    int i2 = i + BLOCK_SIZE;
-  
-    if (i2 < len) {
-        scan_array[threadIdx.x + BLOCK_SIZE] = input[i2];
-    } else {
-        scan_array[threadIdx.x + BLOCK_SIZE] = 0;
-    }
-  
-    //reduction step  
-    stride = 1;
-    while (stride < 2 * BLOCK_SIZE) {//TODO maybe 2 *
-        __syncthreads();
-        index = (threadIdx.x + 1) * stride * 2 - 1;
-        if (index < 2 * BLOCK_SIZE) scan_array[index] += scan_array[index - stride];
-        stride *= 2;
-    }
-    
-    if (threadIdx.x == 0) {
-      blockSum[blockIdx.x] = scan_array[2 * BLOCK_SIZE - 1];
-    }
-  
-    
-    //back - post reduction step
-    for (stride = blockDim.x / 2; stride > 0; stride /= 2) {
-        __syncthreads();      
-        index = (threadIdx.x + 1) * stride * 2 - 1;
-        if (index + stride < 2 * BLOCK_SIZE) scan_array[index + stride] += scan_array[index];   
-    }
-    __syncthreads();
-  
-    if (i < len)
-        input[i] = scan_array[threadIdx.x];
-    if (i2 < len)
-        input[i2] = scan_array[threadIdx.x + BLOCK_SIZE];
-  
-}
-
 /*
     This is a sample of how to use scanLargeArray
     from Nvidia SDK
@@ -198,7 +147,6 @@ void primitive_scan(int N, int inData[], int outData[]) {
 	cudaMemcpy(large_in, tmp, sizeof(float) * large_num, cudaMemcpyHostToDevice);
 
     startTime = CycleTimer::currentSeconds();
-    small_scan<<<1, 512>>>(large_in, large_out, large_num);
    //  preallocBlockSums(large_num);
    //  prescanArray(large_out, large_in, large_num, stream0);
    //  endTime = CycleTimer::currentSeconds();
@@ -209,7 +157,7 @@ void primitive_scan(int N, int inData[], int outData[]) {
    // thrust::exclusive_scan(dev_ptr1, dev_ptr1 + large_num, dev_ptr2);
     endTime = CycleTimer::currentSeconds();
    printf("time excution from thrust scan %.3f ms\n",1000.f * (endTime  - startTime));
-    cudaMemcpy(tmp, large_out, sizeof(float) * large_num, cudaMemcpyDeviceToHost);
+    cudaMemcpy(tmp, large_in, sizeof(float) * large_num, cudaMemcpyDeviceToHost);
     for(int i = 0; i < large_num; i ++) {
         printf("%f ", tmp[i]);
     }
