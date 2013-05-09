@@ -250,9 +250,12 @@ primitive_select(int N, int inData[], int outData[]) {
 */
 void
 primitive_select_stream(int N, int inData[], int outData[]) {
+
+  cudaStream_t   stream0;
+  cudaStreamCreate( &stream0 );
+
   const int threadPerBlock = 512;
   const int blocks = (N + threadPerBlock - 1) / threadPerBlock;
-
   int rows = (blocks / GRID_DIM) == 0? 1 : (blocks / GRID_DIM) + 1;
   int cols = (blocks / GRID_DIM) == 0? blocks : GRID_DIM;
   dim3 blockDim(threadPerBlock, 1);
@@ -279,6 +282,8 @@ primitive_select_stream(int N, int inData[], int outData[]) {
   cudaMemcpy(device_result, tmp, sizeof(int) * N, cudaMemcpyHostToDevice);
   cudaMemcpy(out, tmp, sizeof(int) * N, cudaMemcpyHostToDevice);
   cudaMemcpy(result_size, tmp, sizeof(float) * blocks, cudaMemcpyHostToDevice);
+  preallocBlockSums(blocks);
+   
     cudaPrintfInit();
     double startTime_inner = CycleTimer::currentSeconds();
 //  for(int i = 0 ; i < 10 ; i ++) {
@@ -292,9 +297,13 @@ primitive_select_stream(int N, int inData[], int outData[]) {
     printf("\n");
   cudaThreadSynchronize();*/
 
-    thrust::device_ptr<float> dev_ptr1(result_size);
-    thrust::device_ptr<float> dev_ptr2(histogram);
-    thrust::exclusive_scan(dev_ptr1, dev_ptr1 + blocks, dev_ptr2);
+    // thrust::device_ptr<float> dev_ptr1(result_size);
+    // thrust::device_ptr<float> dev_ptr2(histogram);
+    // thrust::exclusive_scan(dev_ptr1, dev_ptr1 + blocks, dev_ptr2);
+     prescanArray(histogram, result_size, blocks, stream0);
+
+
+
    /* int test_histgram[blocks];
     cudaMemcpy(test_histgram, histogram, sizeof(int)*blocks, cudaMemcpyDeviceToHost);
     for(int i = 0 ; i < blocks; i ++) {
@@ -312,13 +321,14 @@ primitive_select_stream(int N, int inData[], int outData[]) {
 
     double overallDuration = endTime - startTime;
     double kernelDuration = endTime_inner - startTime_inner;
-    printf("CUDA overall: %.3f ms\t\t[%.3f GB/s]\n", 1000.f * overallDuration, toBW(totalBytes, overallDuration));
-    printf("CUDA execution time for kernel: %.3f ms\t\t[%.3f GB/s]\n", 1000.f*kernelDuration, toBW(totalBytes, kernelDuration));
+    printf("CUDA overall with stream: %.3f ms\t\t[%.3f GB/s]\n", 1000.f * overallDuration, toBW(totalBytes, overallDuration));
+    printf("CUDA execution time for kernel with stream: %.3f ms\t\t[%.3f GB/s]\n", 1000.f*kernelDuration, toBW(totalBytes, kernelDuration));
     cudaFree(device_in);
     cudaFree(device_result);
     cudaFree(out);
     cudaFree(result_size);
     cudaFree(histogram);
+    deallocBlockSums();
 }
 
 
