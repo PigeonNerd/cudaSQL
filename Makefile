@@ -3,7 +3,7 @@ EXECUTABLE := cudaSQL
 
 CU_FILES   := primitives_test.cu
 
-CU_DEPS    := scanLargeArray_kernel.cu scan.cu
+CU_DEPS    := scanLargeArray_kernel.cu scan.cu parallel_scan.cu
 
 CC_FILES   := main.cpp
 

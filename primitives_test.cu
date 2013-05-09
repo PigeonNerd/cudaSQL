@@ -13,6 +13,7 @@
 #include "cuPrintf.cu"
 #include "scan.cu"
 #include "book.h"
+#include "parallel_scan.cu"
 
 #define GRID_DIM 65535
 
@@ -147,6 +148,11 @@ void primitive_scan(int N, int inData[], int outData[]) {
 	cudaMemcpy(large_in, tmp, sizeof(float) * large_num, cudaMemcpyHostToDevice);
 
     startTime = CycleTimer::currentSeconds();
+
+    scan_up<<<2, 512>>>(large_in, large_out);
+    scan_sum<<<1, 1>>>(large_in, large_out);
+    scan_down<<<2, 512>>>(large_in, large_out);
+
    //  preallocBlockSums(large_num);
    //  prescanArray(large_out, large_in, large_num, stream0);
    //  endTime = CycleTimer::currentSeconds();
@@ -157,7 +163,7 @@ void primitive_scan(int N, int inData[], int outData[]) {
    // thrust::exclusive_scan(dev_ptr1, dev_ptr1 + large_num, dev_ptr2);
     endTime = CycleTimer::currentSeconds();
    printf("time excution from thrust scan %.3f ms\n",1000.f * (endTime  - startTime));
-    cudaMemcpy(tmp, large_in, sizeof(float) * large_num, cudaMemcpyDeviceToHost);
+    cudaMemcpy(tmp, large_out, sizeof(float) * large_num, cudaMemcpyDeviceToHost);
     for(int i = 0; i < large_num; i ++) {
         printf("%f ", tmp[i]);
     }
