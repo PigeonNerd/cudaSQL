@@ -134,6 +134,8 @@ void primitive_scan(int N, int inData[], int outData[]) {
     float tmp[large_num];
     float* large_in;
     float* large_out;
+    cudaStream_t stream0;
+    cudaStreamCreate( &stream0 );
     double startTime;
     double endTime;
 	cudaMalloc((void**) &large_in, sizeof(float) * large_num);
@@ -145,7 +147,7 @@ void primitive_scan(int N, int inData[], int outData[]) {
 	cudaMemcpy(large_in, tmp, sizeof(float) * large_num, cudaMemcpyHostToDevice);
     startTime = CycleTimer::currentSeconds();
     preallocBlockSums(large_num);
-    prescanArray(large_out, large_in, large_num);
+    prescanArray(large_out, large_in, large_num, stream0);
     endTime = CycleTimer::currentSeconds();
    printf("time excution from large array scan %.3f ms\n", 1000.f * (endTime  - startTime));
    /* startTime = CycleTimer::currentSeconds();

@@ -125,7 +125,8 @@ void deallocBlockSums()
 void prescanArrayRecursive(float *outArray, 
                            const float *inArray, 
                            int numElements, 
-                           int level)
+                           int level,
+                           cudaStream_t stream)
 {
     unsigned int blockSize = BLOCK_SIZE; // max size of the thread blocks
     unsigned int numBlocks = 
@@ -184,14 +185,14 @@ void prescanArrayRecursive(float *outArray,
     // execute the scan
     if (numBlocks > 1)
     {
-        prescan<true, false><<< grid, threads, sharedMemSize >>>(outArray, 
+        prescan<true, false><<< grid, threads, sharedMemSize , stream>>>(outArray, 
                                                                  inArray, 
                                                                  g_scanBlockSums[level],
                                                                  numThreads * 2, 0, 0);
         CUT_CHECK_ERROR("prescanWithBlockSums");
         if (np2LastBlock)
         {
-            prescan<true, true><<< 1, numThreadsLastBlock, sharedMemLastBlock >>>
+            prescan<true, true><<< 1, numThreadsLastBlock, sharedMemLastBlock, stream>>>
                 (outArray, inArray, g_scanBlockSums[level], numEltsLastBlock, 
                  numBlocks - 1, numElements - numEltsLastBlock);
             CUT_CHECK_ERROR("prescanNP2WithBlockSums");
@@ -205,16 +206,16 @@ void prescanArrayRecursive(float *outArray,
         prescanArrayRecursive(g_scanBlockSums[level], 
                               g_scanBlockSums[level], 
                               numBlocks, 
-                              level+1);
+                              level+1, stream);
 
-        uniformAdd<<< grid, threads >>>(outArray, 
+        uniformAdd<<< grid, threads, 0,stream >>>(outArray, 
                                         g_scanBlockSums[level], 
                                         numElements - numEltsLastBlock, 
                                         0, 0);
         CUT_CHECK_ERROR("uniformAdd");
         if (np2LastBlock)
         {
-            uniformAdd<<< 1, numThreadsLastBlock >>>(outArray, 
+            uniformAdd<<< 1, numThreadsLastBlock , 0, stream>>>(outArray, 
                                                      g_scanBlockSums[level], 
                                                      numEltsLastBlock, 
                                                      numBlocks - 1, 
@@ -224,21 +225,21 @@ void prescanArrayRecursive(float *outArray,
     }
     else if (isPowerOfTwo(numElements))
     {
-        prescan<false, false><<< grid, threads, sharedMemSize >>>(outArray, inArray,
+        prescan<false, false><<< grid, threads, sharedMemSize , stream >>>(outArray, inArray,
                                                                   0, numThreads * 2, 0, 0);
         CUT_CHECK_ERROR("prescan");
     }
     else
     {
-         prescan<false, true><<< grid, threads, sharedMemSize >>>(outArray, inArray, 
+         prescan<false, true><<< grid, threads, sharedMemSize , stream >>>(outArray, inArray, 
                                                                   0, numElements, 0, 0);
          CUT_CHECK_ERROR("prescanNP2");
     }
 }
 
-void prescanArray(float *outArray, float *inArray, int numElements)
+void prescanArray(float *outArray, float *inArray, int numElements, cudaStream_t stream)
 {
-    prescanArrayRecursive(outArray, inArray, numElements, 0);
+    prescanArrayRecursive(outArray, inArray, numElements, 0, stream);
 }
 
 
