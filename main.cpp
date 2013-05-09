@@ -4,7 +4,7 @@
 #include <string>
 #include <cstdlib>
 #include "CycleTimer.h"
-#define magnitude  10
+#define magnitude  25 
 #define magnitude2 10 
 
 void printCudaInfo();
@@ -76,7 +76,7 @@ void test_select() {
     }
     printf("%d\n", base);
 
-	int NUM_TUPPLES  = 6 * 20 * 1000 * 1000; 
+	int NUM_TUPPLES  = base; 
 	int* relation = new int[NUM_TUPPLES];
 	int* cuda_result = new int[NUM_TUPPLES];
 	int* sequential_result = new int[NUM_TUPPLES];
