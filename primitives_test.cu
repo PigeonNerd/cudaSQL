@@ -62,7 +62,7 @@ void validate_join(int3* seq_out, int seq_num, int3* cuda_out, int cuda_num) {
     and get the cout of tuples of each block
 */
 __global__ void
-primitive_select_kernel(int N, int blocks, int* tuples, int* result, int* result_size) {
+primitive_select_kernel(int N, int blocks, int* tuples, int* result, float* result_size) {
 
 	__shared__ uint input[SCAN_BLOCK_DIM];
 	__shared__ uint output[SCAN_BLOCK_DIM];
@@ -106,7 +106,7 @@ primitive_select_kernel(int N, int blocks, int* tuples, int* result, int* result
 /*
     gather stage
 */
-__global__ void coalesced(int N, int* result, int* result_size, int* histogram, int* out) {
+__global__ void coalesced(int N, int* result, float* result_size, float* histogram, int* out) {
 	int threadIndex =  threadIdx.x;
 	int partition = (blockIdx.y * gridDim.x + blockIdx.x) * blockDim.x;
     int blockIndex = blockIdx.y * gridDim.x + blockIdx.x;
@@ -115,11 +115,11 @@ __global__ void coalesced(int N, int* result, int* result_size, int* histogram, 
         return;
     }
 
-    if( threadIndex < result_size[blockIndex]) {
+    if( threadIndex < (int)result_size[blockIndex]) {
           /*if(histogram[blockIndex] + threadIndex == 0) {
             cuPrintf("%d %d\n", blockIndex, threadIndex);
           }*/
-		  out[histogram[blockIndex] + threadIndex] = result[partition + threadIndex];
+		  out[(int)histogram[blockIndex] + threadIndex] = result[partition + threadIndex];
 	   }
 	__syncthreads();
 }
@@ -187,15 +187,15 @@ primitive_select(int N, int inData[], int outData[]) {
 	printf("Num of blocks for result size %d\n", blocksOfReulstSize);
     int* device_in;
 	int* device_result;
-	int* result_size;
-	int* histogram;
+	float* result_size;
+	float* histogram;
 	int* out;
 	int* tmp = (int*)calloc(N, sizeof(int));
 	cudaMalloc((void**) &device_in, sizeof(int) * N);
 	cudaMalloc((void**) &device_result, sizeof(int) * N);
 	cudaMalloc((void**) &out, sizeof(int) * N);
-	cudaMalloc((void**) &result_size, sizeof(int) * blocks);
-	cudaMalloc((void**) &histogram, sizeof(int) * blocks);
+	cudaMalloc((void**) &result_size, sizeof(float) * blocks);
+	cudaMalloc((void**) &histogram, sizeof(float) * blocks);
     double startTime = CycleTimer::currentSeconds();
 	cudaMemcpy(device_in, inData, sizeof(int) * N, cudaMemcpyHostToDevice);
 	cudaMemcpy(device_result, tmp, sizeof(int) * N, cudaMemcpyHostToDevice);
@@ -214,8 +214,8 @@ primitive_select(int N, int inData[], int outData[]) {
     printf("\n");
 	cudaThreadSynchronize();*/
 
-    thrust::device_ptr<int> dev_ptr1(result_size);
-    thrust::device_ptr<int> dev_ptr2(histogram);
+    thrust::device_ptr<float> dev_ptr1(result_size);
+    thrust::device_ptr<float> dev_ptr2(histogram);
     thrust::exclusive_scan(dev_ptr1, dev_ptr1 + blocks, dev_ptr2);
    /* int test_histgram[blocks];
     cudaMemcpy(test_histgram, histogram, sizeof(int)*blocks, cudaMemcpyDeviceToHost);
@@ -242,6 +242,85 @@ primitive_select(int N, int inData[], int outData[]) {
     cudaFree(result_size);
     cudaFree(histogram);
 }
+
+
+
+/*
+    Implementation of SELECT operation with stream
+*/
+void
+primitive_select_stream(int N, int inData[], int outData[]) {
+  const int threadPerBlock = 512;
+  const int blocks = (N + threadPerBlock - 1) / threadPerBlock;
+
+  int rows = (blocks / GRID_DIM) == 0? 1 : (blocks / GRID_DIM) + 1;
+  int cols = (blocks / GRID_DIM) == 0? blocks : GRID_DIM;
+  dim3 blockDim(threadPerBlock, 1);
+  dim3 gridDim(cols, rows);
+    printf("rows %d cols: %d\n", rows, cols);
+  const int blocksOfReulstSize = ( blocks + threadPerBlock - 1) / threadPerBlock;
+    int totalBytes = N * sizeof(int) * 2;
+    printf("Num of tuples %d\n", N);
+  printf("Num of blocks %d\n", blocks);
+  printf("Num of blocks for result size %d\n", blocksOfReulstSize);
+    int* device_in;
+  int* device_result;
+  float* result_size;
+  float* histogram;
+  int* out;
+  int* tmp = (int*)calloc(N, sizeof(int));
+  cudaMalloc((void**) &device_in, sizeof(int) * N);
+  cudaMalloc((void**) &device_result, sizeof(int) * N);
+  cudaMalloc((void**) &out, sizeof(int) * N);
+  cudaMalloc((void**) &result_size, sizeof(float) * blocks);
+  cudaMalloc((void**) &histogram, sizeof(float) * blocks);
+    double startTime = CycleTimer::currentSeconds();
+  cudaMemcpy(device_in, inData, sizeof(int) * N, cudaMemcpyHostToDevice);
+  cudaMemcpy(device_result, tmp, sizeof(int) * N, cudaMemcpyHostToDevice);
+  cudaMemcpy(out, tmp, sizeof(int) * N, cudaMemcpyHostToDevice);
+  cudaMemcpy(result_size, tmp, sizeof(float) * blocks, cudaMemcpyHostToDevice);
+    cudaPrintfInit();
+    double startTime_inner = CycleTimer::currentSeconds();
+//  for(int i = 0 ; i < 10 ; i ++) {
+    primitive_select_kernel<<<gridDim, blockDim>>>(N, blocks, device_in, device_result, result_size);
+
+   /* int test_result_size[blocks];
+    cudaMemcpy(test_result_size, result_size, sizeof(int) * blocks, cudaMemcpyDeviceToHost);
+    for(int i = 0 ; i < blocks ; i ++) {
+       printf("%d: %d, ",i ,test_result_size[i]);
+    }
+    printf("\n");
+  cudaThreadSynchronize();*/
+
+    thrust::device_ptr<float> dev_ptr1(result_size);
+    thrust::device_ptr<float> dev_ptr2(histogram);
+    thrust::exclusive_scan(dev_ptr1, dev_ptr1 + blocks, dev_ptr2);
+   /* int test_histgram[blocks];
+    cudaMemcpy(test_histgram, histogram, sizeof(int)*blocks, cudaMemcpyDeviceToHost);
+    for(int i = 0 ; i < blocks; i ++) {
+        printf("%d, ", test_histgram[i]);
+    }
+    printf("\n");*/
+  coalesced<<<gridDim, blockDim>>>(N, device_result, result_size, histogram, out);
+  //  }
+    double endTime_inner = CycleTimer::currentSeconds();
+    cudaPrintfDisplay(stdout, true);
+    cudaPrintfEnd();
+
+    cudaMemcpy(outData, out, sizeof(int) * N, cudaMemcpyDeviceToHost);
+    double endTime = CycleTimer::currentSeconds();
+
+    double overallDuration = endTime - startTime;
+    double kernelDuration = endTime_inner - startTime_inner;
+    printf("CUDA overall: %.3f ms\t\t[%.3f GB/s]\n", 1000.f * overallDuration, toBW(totalBytes, overallDuration));
+    printf("CUDA execution time for kernel: %.3f ms\t\t[%.3f GB/s]\n", 1000.f*kernelDuration, toBW(totalBytes, kernelDuration));
+    cudaFree(device_in);
+    cudaFree(device_result);
+    cudaFree(out);
+    cudaFree(result_size);
+    cudaFree(histogram);
+}
+
 
 __device__ int get_index_to_check(int thread, int num_threads, int set_size, int offset) {
 
