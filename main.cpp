@@ -77,7 +77,7 @@ void test_select() {
     }
     printf("%d\n", base);
 
-	int NUM_TUPPLES  = base; 
+	int NUM_TUPPLES  = 9 * base; 
 	int* relation = new int[NUM_TUPPLES];
 	int* cuda_result = new int[NUM_TUPPLES];
 	int* sequential_result = new int[NUM_TUPPLES];
@@ -85,19 +85,18 @@ void test_select() {
 		relation[i] = rand() % 100000 + 1;
 		cuda_result[i] = 0;
 	}
+    primitive_select_stream(NUM_TUPPLES, relation, cuda_result);
 	primitive_select(NUM_TUPPLES, relation, cuda_result);
-    //primitive_select_stream(NUM_TUPPLES, relation, cuda_result);
     double startTime = CycleTimer::currentSeconds();
     //for(int i = 0 ; i < 10 ; i++) {
-       sequential_select(NUM_TUPPLES, relation, sequential_result); 
+    sequential_select(NUM_TUPPLES, relation, sequential_result); 
     //}
     double endTime = CycleTimer::currentSeconds();
     double overallDuration = endTime - startTime;
     printf("Sequential overall: %.3f ms\t\t[%.3f GB/s]\n", 1000.f * overallDuration, toBW( NUM_TUPPLES * sizeof(int) * 2, overallDuration));
 	validate(NUM_TUPPLES, sequential_result, cuda_result);
     // primitive_scan(0, NULL, NULL); 
-    // streamTest(); 
-    // sequentialTest();
+    
 }
 
 

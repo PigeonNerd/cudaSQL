@@ -254,14 +254,13 @@ primitive_select(int N, int inData[], int outData[]) {
 /*
     Implementation of SELECT operation with stream
 */
-/*void
+void
 primitive_select_stream(int N, int inData[], int outData[]) {
 
   int full_data_size = N;
   int one_stripe = 1024*1024;
   cudaStream_t stream0, stream1, stream2;
   
-
   const int threadPerBlock = 512;
   const int blocks = (one_stripe + threadPerBlock - 1) / threadPerBlock;
   int rows = (blocks / GRID_DIM) == 0? 1 : (blocks / GRID_DIM) + 1;
@@ -328,61 +327,71 @@ primitive_select_stream(int N, int inData[], int outData[]) {
 
   cudaHostAlloc( (void**)&host_inData, full_data_size * sizeof(int), cudaHostAllocDefault);
   cudaHostAlloc( (void**)&host_outData, full_data_size * sizeof(int), cudaHostAllocDefault);
+  
+  memcpy(host_inData, inData, full_data_size * sizeof(int));
 
-  // cudaMemcpy(device_in, inData, sizeof(int) * N, cudaMemcpyHostToDevice);
+  double startTime = CycleTimer::currentSeconds();
+   for (int i=0; i < full_data_size; i+= N * 3) {
+        // enqueue copies of 
+       cudaMemcpyAsync( device_in_0, host_inData+i, sizeof(int) * one_stripe, cudaMemcpyHostToDevice, stream0);
+       primitive_select_kernel<<<gridDim, blockDim, 0, stream0 >>>(one_stripe, blocks, device_in_0, device_result_0, result_size_0);
+       scan_up<<< 2, 512, 0, stream0>>>(result_size_0, histogram_0);
+       scan_sum<<< 1, 1, 0, stream0>>>(result_size_0, histogram_0);
+       scan_down<<< 2, 512, 0, stream0>>>(result_size_0, histogram_0);
+       coalesced<<<gridDim, blockDim, 0, stream0>>>(one_stripe, device_result_0, result_size_0, histogram_0, out_0);
+       cudaMemcpyAsync(host_outData + i, out_0, sizeof(int) * one_stripe, cudaMemcpyDeviceToHost, stream0);
 
-  // cudaMemcpy(device_result, tmp, sizeof(int) * N, cudaMemcpyHostToDevice);
-  // cudaMemcpy(out, tmp, sizeof(int) * N, cudaMemcpyHostToDevice);
-  // cudaMemcpy(result_size, tmp, sizeof(float) * blocks, cudaMemcpyHostToDevice);
-  preallocBlockSums(blocks);
-   
-    cudaPrintfInit();
-    double startTime_inner = CycleTimer::currentSeconds();
-//  for(int i = 0 ; i < 10 ; i ++) {
-    primitive_select_kernel<<<gridDim, blockDim, 0, stream0 >>>(N, blocks, device_in, device_result, result_size);
-
-   /* int test_result_size[blocks];
-    cudaMemcpy(test_result_size, result_size, sizeof(int) * blocks, cudaMemcpyDeviceToHost);
-    for(int i = 0 ; i < blocks ; i ++) {
-       printf("%d: %d, ",i ,test_result_size[i]);
+       cudaMemcpyAsync( device_in_1, host_inData + i + N, sizeof(int) * one_stripe, cudaMemcpyHostToDevice, stream1);
+       primitive_select_kernel<<<gridDim, blockDim, 0, stream1 >>>(one_stripe, blocks, device_in_1, device_result_1, result_size_1);
+       scan_up<<< 2, 512, 0, stream1>>>(result_size_1, histogram_1);
+       scan_sum<<< 1, 1, 0, stream1>>>(result_size_1, histogram_1);
+       scan_down<<< 2, 512, 0, stream1>>>(result_size_1, histogram_1);
+       coalesced<<<gridDim, blockDim, 0, stream1>>>(one_stripe, device_result_1, result_size_1, histogram_1, out_1);
+       cudaMemcpyAsync(host_outData + i + N, out_1, sizeof(int) * one_stripe, cudaMemcpyDeviceToHost, stream1);
+      
+       cudaMemcpyAsync( device_in_2, host_inData + i + 2 * N, sizeof(int) * one_stripe, cudaMemcpyHostToDevice, stream2);
+       primitive_select_kernel<<<gridDim, blockDim, 0, stream2 >>>(one_stripe, blocks, device_in_2, device_result_2, result_size_2);
+       scan_up<<< 2, 512, 0, stream2>>>(result_size_2, histogram_2);
+       scan_sum<<< 1, 1, 0, stream2>>>(result_size_2, histogram_2);
+       scan_down<<< 2, 512, 0, stream2>>>(result_size_2, histogram_2);
+       coalesced<<<gridDim, blockDim, 0, stream2>>>(one_stripe, device_result_2, result_size_2, histogram_2, out_2);
+       cudaMemcpyAsync(host_outData + i + 2 * N, out_2, sizeof(int) * one_stripe, cudaMemcpyDeviceToHost, stream2);
     }
-    printf("\n");
-  cudaThreadSynchronize();
+    cudaStreamSynchronize( stream0 );
+    cudaStreamSynchronize( stream1 );
+    cudaStreamSynchronize( stream2 );
 
-    // thrust::device_ptr<float> dev_ptr1(result_size);
-    // thrust::device_ptr<float> dev_ptr2(histogram);
-    // thrust::exclusive_scan(dev_ptr1, dev_ptr1 + blocks, dev_ptr2);
-     prescanArray(histogram, result_size, blocks, stream0);
-
-
-
-   /* int test_histgram[blocks];
-    cudaMemcpy(test_histgram, histogram, sizeof(int)*blocks, cudaMemcpyDeviceToHost);
-    for(int i = 0 ; i < blocks; i ++) {
-        printf("%d, ", test_histgram[i]);
-    }
-    printf("\n");
-  coalesced<<<gridDim, blockDim, 0,stream0>>>(N, device_result, result_size, histogram, out);
-  //  }
-  cudaStreamSynchronize( stream0 );
-    double endTime_inner = CycleTimer::currentSeconds();
-    cudaPrintfDisplay(stdout, true);
-    cudaPrintfEnd();
-
-    cudaMemcpy(outData, out, sizeof(int) * N, cudaMemcpyDeviceToHost);
     double endTime = CycleTimer::currentSeconds();
-
     double overallDuration = endTime - startTime;
-    double kernelDuration = endTime_inner - startTime_inner;
-    printf("CUDA overall with stream: %.3f ms\t\t[%.3f GB/s]\n", 1000.f * overallDuration, toBW(totalBytes, overallDuration));
-    printf("CUDA execution time for kernel with stream: %.3f ms\t\t[%.3f GB/s]\n", 1000.f*kernelDuration, toBW(totalBytes, kernelDuration));
-    cudaFree(device_in);
-    cudaFree(device_result);
-    cudaFree(out);
-    cudaFree(result_size);
-    cudaFree(histogram);
-    deallocBlockSums();
-}*/
+    printf("CUDA SELECT overall with stream: %.3f ms\t\t[%.3f GB/s]\n", 1000.f * overallDuration, toBW(totalBytes, overallDuration));
+    
+    memcpy(outData, host_outData, full_data_size * sizeof(int));
+
+    cudaFree(device_in_0);
+    cudaFree(device_result_0);
+    cudaFree(out_0);
+    cudaFree(result_size_0);
+    cudaFree(histogram_0);
+    
+    cudaFree(device_in_1);
+    cudaFree(device_result_1);
+    cudaFree(out_1);
+    cudaFree(result_size_1);
+    cudaFree(histogram_1);
+
+    cudaFree(device_in_2);
+    cudaFree(device_result_2);
+    cudaFree(out_2);
+    cudaFree(result_size_2);
+    cudaFree(histogram_2);
+
+    cudaFreeHost(host_outData);
+    cudaFreeHost(host_inData);
+
+    cudaStreamDestroy(stream0);
+    cudaStreamDestroy(stream1);
+    cudaStreamDestroy(stream2);
+}
 
 
 __device__ int get_index_to_check(int thread, int num_threads, int set_size, int offset) {
