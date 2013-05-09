@@ -130,7 +130,7 @@ __global__ void coalesced(int N, int* result, int* result_size, int* histogram, 
     from Nvidia SDK
 */
 void primitive_scan(int N, int inData[], int outData[]) {
-	int large_num = 39063;
+	int large_num = 50000;
     float tmp[large_num];
     float* large_in;
     float* large_out;
@@ -150,15 +150,15 @@ void primitive_scan(int N, int inData[], int outData[]) {
     prescanArray(large_out, large_in, large_num, stream0);
     endTime = CycleTimer::currentSeconds();
    printf("time excution from large array scan %.3f ms\n", 1000.f * (endTime  - startTime));
-   /* startTime = CycleTimer::currentSeconds();
-    thrust::device_ptr<float> dev_ptr1(large_in);
-    thrust::device_ptr<float> dev_ptr2(large_out);
-    thrust::exclusive_scan(dev_ptr1, dev_ptr1 + large_num, dev_ptr2);
-    endTime = CycleTimer::currentSeconds();
-   printf("time excution from thrust scan %.3f ms\n",1000.f * (endTime  - startTime));*/
+   // startTime = CycleTimer::currentSeconds();
+   // thrust::device_ptr<float> dev_ptr1(large_in);
+   // thrust::device_ptr<float> dev_ptr2(large_out);
+   // thrust::exclusive_scan(dev_ptr1, dev_ptr1 + large_num, dev_ptr2);
+   // endTime = CycleTimer::currentSeconds();
+   //printf("time excution from thrust scan %.3f ms\n",1000.f * (endTime  - startTime));
     cudaMemcpy(tmp, large_out, sizeof(float) * large_num, cudaMemcpyDeviceToHost);
     for(int i = 0; i < large_num; i ++) {
-        printf("%f ", tmp[i]);
+        //printf("%f ", tmp[i]);
     }
     printf("\n");
     int y[] = {1, 2};
