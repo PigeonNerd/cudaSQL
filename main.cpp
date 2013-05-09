@@ -4,7 +4,7 @@
 #include <string>
 #include <cstdlib>
 #include "CycleTimer.h"
-#define magnitude  27
+#define magnitude  10
 #define magnitude2 10 
 
 void printCudaInfo();
@@ -20,8 +20,8 @@ bool validate(int N, int* sequential, int* target);
 float toBW(int bytes, float sec);
 
 int main(int argc, char** argv) {
-    test_select(); 
-    //test_join(); 
+    //test_select(); 
+    test_join(); 
     return 0;
 }
 

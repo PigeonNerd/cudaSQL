@@ -406,7 +406,7 @@ __global__ void pnary_partition(int2* rel_a, int2* rel_b, int* lower_array, int*
         upper = M - 1;
     }
     out_bound[blockIdx.x] = blockDim.x * ( upper - lower + 1); 
-   /* if(threadIdx.x == 0) {
+    /*if(threadIdx.x == 0) {
     cuPrintf("lower_bound: %d ret: %d offset: %d\n", lower_bound, lower_array[2 * blockIdx.x], lower_array[2 * blockIdx.x + 1]);
     cuPrintf("upper_bound: %d ret: %d offset: %d\n", upper_bound, upper_array[2 * blockIdx.x], upper_array[2 * blockIdx.x + 1]);
     cuPrintf("num result tuples: %f\n", out_bound[blockIdx.x]);
@@ -459,9 +459,10 @@ __global__ brute_join( int3* out, int2* rel_a, int2* rel_b, int num, int N, int 
             out[j].x = left[threadIndex].x;
             out[j].y = left[threadIndex].y;
             out[j].z = right[i].y;
-            /*if( blockIdx.x == 3) {
-                cuPrintf("index %d =  %d + %d + %d\n", j, (int)out_bound[blockIdx.x], index[threadIndex], current);
-            }*/
+            if( blockIdx.x == 1) {
+                //cuPrintf("%d\n",out[j].x);
+               // cuPrintf("index %d =  %d + %d + %d\n", j, (int)out_bound[blockIdx.x], index[threadIndex], current);
+            }
             current++;
            } 
         }
@@ -481,7 +482,11 @@ __global__ join_coalesced(int3* result, int3* out, float* result_size, float* hi
         if(i + threadIdx.x < size) {
            out_index = out_bound[blockIdx.x] + threadIdx.x + i;
            result_index = histogram[blockIdx.x] + threadIdx.x + i;
-          /* if(blockIdx.x == 3) {
+           if(blockIdx.x == 1) {
+                //cuPrintf("## %d  = %d  + %d + %d\n", out_index, (int)out_bound[blockIdx.x], threadIdx.x, i);
+           }
+          /* if(result_index == 528) {
+                cuPrintf("## %d\n", out[out_index].x);
                 cuPrintf("## %d  = %d  + %d + %d\n", out_index, (int)out_bound[blockIdx.x], threadIdx.x, i);
            }*/
            result[result_index].x = out[out_index].x;
@@ -541,8 +546,8 @@ void primitive_join(int N, int M) {
     float* histogram;
     int3* out;
     int3* result;
-    cudaMalloc((void**) &out, sizeof(int3) * N * 4);
-    cudaMalloc((void**) &result, sizeof(int3) * N * 4);
+    cudaMalloc((void**) &out, sizeof(int3) * N * M);
+    cudaMalloc((void**) &result, sizeof(int3) * N * M);
     cudaMalloc((void**) &result_size, sizeof(float) * blocks);
     cudaMalloc((void**) &histogram, sizeof(float) * blocks);
     cudaMalloc((void**) &out_bound, sizeof(float) * blocks);
@@ -563,7 +568,7 @@ void primitive_join(int N, int M) {
     thrust::exclusive_scan(dev_ptr1, dev_ptr1 + blocks, dev_ptr1);
     //prescanArray(out_bound, out_bound, blocks);
     //deallocBlockSums();
-    brute_join<<< blocks, threadPerBlock >>>(out, dev_rel_a, dev_rel_b,  N * 4 , N, M, out_bound, result_size, lower_array, upper_array);
+    brute_join<<< blocks, threadPerBlock >>>(out, dev_rel_a, dev_rel_b,  N * M , N, M, out_bound, result_size, lower_array, upper_array);
 
     thrust::device_ptr<float> dev_ptr2(result_size);
     thrust::device_ptr<float> dev_ptr3(histogram);
