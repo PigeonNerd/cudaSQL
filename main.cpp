@@ -4,7 +4,7 @@
 #include <string>
 #include <cstdlib>
 #include "CycleTimer.h"
-#define magnitude  25 
+#define magnitude  20 
 #define magnitude2 10 
 
 void printCudaInfo();
@@ -22,7 +22,7 @@ float toBW(int bytes, float sec);
 
 int main(int argc, char** argv) {
     test_select();
-    primitive_scan(0, NULL, NULL);
+    //primitive_scan(0, NULL, NULL);
     //test_join(); 
     return 0;
 }
@@ -77,12 +77,12 @@ void test_select() {
     }
     printf("%d\n", base);
 
-	int NUM_TUPPLES  = 9 * base; 
+	int NUM_TUPPLES  = 12 * base; 
 	int* relation = new int[NUM_TUPPLES];
 	int* cuda_result = new int[NUM_TUPPLES];
 	int* sequential_result = new int[NUM_TUPPLES];
      for(int i = 0; i < NUM_TUPPLES; i++) {
-		relation[i] = rand() % 100000 + 1;
+		relation[i] = rand() % 1000 + 1;
 		cuda_result[i] = 0;
 	}
     primitive_select_stream(NUM_TUPPLES, relation, cuda_result);
@@ -109,6 +109,7 @@ void sequential_select(int N, int inData[], int outData[]) {
             counter++;
         }
     }
+    //printf("seq num: %d\n", counter);
 }
 
 bool validate(int N, int* sequential, int* target) {

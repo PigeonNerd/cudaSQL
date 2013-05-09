@@ -310,9 +310,17 @@ primitive_select_stream(int N, int inData[], int outData[]) {
   cudaMalloc((void**) &device_result_1, sizeof(int) * one_stripe);
   cudaMalloc((void**) &device_result_2, sizeof(int) * one_stripe);
 
+  cudaMemcpy(device_result_0, tmp, sizeof(int) * one_stripe, cudaMemcpyHostToDevice);
+  cudaMemcpy(device_result_1, tmp, sizeof(int) * one_stripe, cudaMemcpyHostToDevice);
+  cudaMemcpy(device_result_2, tmp, sizeof(int) * one_stripe, cudaMemcpyHostToDevice);
+
   cudaMalloc((void**) &out_0, sizeof(int) * one_stripe);
   cudaMalloc((void**) &out_1, sizeof(int) * one_stripe);
   cudaMalloc((void**) &out_2, sizeof(int) * one_stripe);
+  
+  cudaMemcpy(out_0, tmp, sizeof(int) * one_stripe, cudaMemcpyHostToDevice);
+  cudaMemcpy(out_1, tmp, sizeof(int) * one_stripe, cudaMemcpyHostToDevice);
+  cudaMemcpy(out_2, tmp, sizeof(int) * one_stripe, cudaMemcpyHostToDevice);
 
   cudaMalloc((void**) &result_size_0, sizeof(float) * blocks);
   cudaMalloc((void**) &result_size_1, sizeof(float) * blocks);
@@ -329,9 +337,10 @@ primitive_select_stream(int N, int inData[], int outData[]) {
   cudaHostAlloc( (void**)&host_outData, full_data_size * sizeof(int), cudaHostAllocDefault);
   
   memcpy(host_inData, inData, full_data_size * sizeof(int));
+  memcpy(host_outData, tmp, full_data_size * sizeof(int));
 
   double startTime = CycleTimer::currentSeconds();
-   for (int i=0; i < full_data_size; i+= N * 3) {
+   for (int i = 0; i < full_data_size; i += 3 * one_stripe) {
         // enqueue copies of 
        cudaMemcpyAsync( device_in_0, host_inData+i, sizeof(int) * one_stripe, cudaMemcpyHostToDevice, stream0);
        primitive_select_kernel<<<gridDim, blockDim, 0, stream0 >>>(one_stripe, blocks, device_in_0, device_result_0, result_size_0);
@@ -341,21 +350,21 @@ primitive_select_stream(int N, int inData[], int outData[]) {
        coalesced<<<gridDim, blockDim, 0, stream0>>>(one_stripe, device_result_0, result_size_0, histogram_0, out_0);
        cudaMemcpyAsync(host_outData + i, out_0, sizeof(int) * one_stripe, cudaMemcpyDeviceToHost, stream0);
 
-       cudaMemcpyAsync( device_in_1, host_inData + i + N, sizeof(int) * one_stripe, cudaMemcpyHostToDevice, stream1);
+       cudaMemcpyAsync( device_in_1, host_inData + i + one_stripe, sizeof(int) * one_stripe, cudaMemcpyHostToDevice, stream1);
        primitive_select_kernel<<<gridDim, blockDim, 0, stream1 >>>(one_stripe, blocks, device_in_1, device_result_1, result_size_1);
        scan_up<<< 2, 512, 0, stream1>>>(result_size_1, histogram_1);
        scan_sum<<< 1, 1, 0, stream1>>>(result_size_1, histogram_1);
        scan_down<<< 2, 512, 0, stream1>>>(result_size_1, histogram_1);
        coalesced<<<gridDim, blockDim, 0, stream1>>>(one_stripe, device_result_1, result_size_1, histogram_1, out_1);
-       cudaMemcpyAsync(host_outData + i + N, out_1, sizeof(int) * one_stripe, cudaMemcpyDeviceToHost, stream1);
+       cudaMemcpyAsync(host_outData + i + one_stripe, out_1, sizeof(int) * one_stripe, cudaMemcpyDeviceToHost, stream1);
       
-       cudaMemcpyAsync( device_in_2, host_inData + i + 2 * N, sizeof(int) * one_stripe, cudaMemcpyHostToDevice, stream2);
+       cudaMemcpyAsync( device_in_2, host_inData + i + 2 * one_stripe, sizeof(int) * one_stripe, cudaMemcpyHostToDevice, stream2);
        primitive_select_kernel<<<gridDim, blockDim, 0, stream2 >>>(one_stripe, blocks, device_in_2, device_result_2, result_size_2);
        scan_up<<< 2, 512, 0, stream2>>>(result_size_2, histogram_2);
        scan_sum<<< 1, 1, 0, stream2>>>(result_size_2, histogram_2);
        scan_down<<< 2, 512, 0, stream2>>>(result_size_2, histogram_2);
        coalesced<<<gridDim, blockDim, 0, stream2>>>(one_stripe, device_result_2, result_size_2, histogram_2, out_2);
-       cudaMemcpyAsync(host_outData + i + 2 * N, out_2, sizeof(int) * one_stripe, cudaMemcpyDeviceToHost, stream2);
+       cudaMemcpyAsync(host_outData + i + 2 * one_stripe, out_2, sizeof(int) * one_stripe, cudaMemcpyDeviceToHost, stream2);
     }
     cudaStreamSynchronize( stream0 );
     cudaStreamSynchronize( stream1 );
@@ -366,6 +375,14 @@ primitive_select_stream(int N, int inData[], int outData[]) {
     printf("CUDA SELECT overall with stream: %.3f ms\t\t[%.3f GB/s]\n", 1000.f * overallDuration, toBW(totalBytes, overallDuration));
     
     memcpy(outData, host_outData, full_data_size * sizeof(int));
+    int count = 0; 
+    for(int i = 0; i < full_data_size; i++) {
+        if(outData[i] != 0 && outData[i] % 2 == 0) {
+            //printf("%d ", outData[i]);
+            count++;
+        }
+    }
+    //printf("\nGPU num %d\n", count);
 
     cudaFree(device_in_0);
     cudaFree(device_result_0);
