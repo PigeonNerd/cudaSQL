@@ -137,6 +137,13 @@ __global__ void small_scan(float* histogram, float* result_size) {
      __syncthreads();
   }
    sharedMemExclusiveScan(threadIdx.x, input, output, scratch, 2048);
+
+  for(int i = 0; i < 2048; i += 512 ) {
+    if( threadIdx.x + i < 2048) {
+      histogram[threadIdx.x + i] = output[threadIdx.x + i];
+    }
+     __syncthreads();
+  }
 }
 
 /*
