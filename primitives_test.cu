@@ -57,6 +57,7 @@ void validate_join(int3* seq_out, int seq_num, int3* cuda_out, int cuda_num) {
     printf("JOIN PASS !\n");
 }
 
+
 /*
     choose the quilified tuples from the relation
     and get the cout of tuples of each block
@@ -125,12 +126,25 @@ __global__ void coalesced(int N, int* result, float* result_size, float* histogr
 }
 
 
+__global__ void small_scan(float* histogram, float* result_size) {
+  __shared__ uint input[2048];
+  __shared__ uint output[2048];
+  __shared__ uint scratch[2 * 2048];
+  for(int i = 0; i < 2048; i += 512 ) {
+    if( threadIdx.x + i < 2048) {
+      input[threadIdx.x + i] = result_size[threadIdx.x + i];
+    }
+     __syncthreads();
+  }
+   sharedMemExclusiveScan(threadIdx.x, input, output, scratch, 2048);
+}
+
 /*
     This is a sample of how to use scanLargeArray
     from Nvidia SDK
 */
 void primitive_scan(int N, int inData[], int outData[]) {
-	int large_num = 50000;
+	int large_num = 2048;
     float tmp[large_num];
     float* large_in;
     float* large_out;
@@ -145,20 +159,22 @@ void primitive_scan(int N, int inData[], int outData[]) {
         tmp[i] = 1.0;
     }
 	cudaMemcpy(large_in, tmp, sizeof(float) * large_num, cudaMemcpyHostToDevice);
+
     startTime = CycleTimer::currentSeconds();
-    preallocBlockSums(large_num);
-    prescanArray(large_out, large_in, large_num, stream0);
-    endTime = CycleTimer::currentSeconds();
-   printf("time excution from large array scan %.3f ms\n", 1000.f * (endTime  - startTime));
+    small_scan<<< 1, 512 >>>(large_out, large_in);
+   //  preallocBlockSums(large_num);
+   //  prescanArray(large_out, large_in, large_num, stream0);
+   //  endTime = CycleTimer::currentSeconds();
+   // printf("time excution from large array scan %.3f ms\n", 1000.f * (endTime  - startTime));
    // startTime = CycleTimer::currentSeconds();
    // thrust::device_ptr<float> dev_ptr1(large_in);
    // thrust::device_ptr<float> dev_ptr2(large_out);
    // thrust::exclusive_scan(dev_ptr1, dev_ptr1 + large_num, dev_ptr2);
-   // endTime = CycleTimer::currentSeconds();
-   //printf("time excution from thrust scan %.3f ms\n",1000.f * (endTime  - startTime));
+    endTime = CycleTimer::currentSeconds();
+   printf("time excution from thrust scan %.3f ms\n",1000.f * (endTime  - startTime));
     cudaMemcpy(tmp, large_out, sizeof(float) * large_num, cudaMemcpyDeviceToHost);
     for(int i = 0; i < large_num; i ++) {
-        //printf("%f ", tmp[i]);
+        printf("%f ", tmp[i]);
     }
     printf("\n");
     int y[] = {1, 2};
@@ -245,43 +261,90 @@ primitive_select(int N, int inData[], int outData[]) {
 
 
 
+
 /*
     Implementation of SELECT operation with stream
 */
-void
+/*void
 primitive_select_stream(int N, int inData[], int outData[]) {
 
-  cudaStream_t   stream0;
-  cudaStreamCreate( &stream0 );
+  int full_data_size = N;
+  int one_stripe = 1024*1024;
+  cudaStream_t stream0, stream1, stream2;
+  
 
   const int threadPerBlock = 512;
-  const int blocks = (N + threadPerBlock - 1) / threadPerBlock;
+  const int blocks = (one_stripe + threadPerBlock - 1) / threadPerBlock;
   int rows = (blocks / GRID_DIM) == 0? 1 : (blocks / GRID_DIM) + 1;
   int cols = (blocks / GRID_DIM) == 0? blocks : GRID_DIM;
   dim3 blockDim(threadPerBlock, 1);
   dim3 gridDim(cols, rows);
-    printf("rows %d cols: %d\n", rows, cols);
+
+
+  printf("rows %d cols: %d\n", rows, cols);
   const int blocksOfReulstSize = ( blocks + threadPerBlock - 1) / threadPerBlock;
-    int totalBytes = N * sizeof(int) * 2;
-    printf("Num of tuples %d\n", N);
+  int totalBytes = N * sizeof(int) * 2;
+  printf("Num of tuples %d\n", N);
   printf("Num of blocks %d\n", blocks);
   printf("Num of blocks for result size %d\n", blocksOfReulstSize);
-    int* device_in;
-  int* device_result;
-  float* result_size;
-  float* histogram;
-  int* out;
+  
   int* tmp = (int*)calloc(N, sizeof(int));
-  cudaMalloc((void**) &device_in, sizeof(int) * N);
-  cudaMalloc((void**) &device_result, sizeof(int) * N);
-  cudaMalloc((void**) &out, sizeof(int) * N);
-  cudaMalloc((void**) &result_size, sizeof(float) * blocks);
-  cudaMalloc((void**) &histogram, sizeof(float) * blocks);
-    double startTime = CycleTimer::currentSeconds();
-  cudaMemcpy(device_in, inData, sizeof(int) * N, cudaMemcpyHostToDevice);
-  cudaMemcpy(device_result, tmp, sizeof(int) * N, cudaMemcpyHostToDevice);
-  cudaMemcpy(out, tmp, sizeof(int) * N, cudaMemcpyHostToDevice);
-  cudaMemcpy(result_size, tmp, sizeof(float) * blocks, cudaMemcpyHostToDevice);
+
+  cudaStreamCreate( &stream0 );
+  cudaStreamCreate( &stream1 );
+  cudaStreamCreate( &stream2 );
+
+  int* device_in_0;
+  int* device_in_1;
+  int* device_in_2;
+
+  int* device_result_0;
+  int* device_result_1;
+  int* device_result_2;
+
+  float* result_size_0;
+  float* result_size_1;
+  float* result_size_2;
+
+  float* histogram_0;
+  float* histogram_1;
+  float* histogram_2;
+
+  int* out_0;
+  int* out_1;
+  int* out_2;
+
+  cudaMalloc((void**) &device_in_0, sizeof(int) * one_stripe);
+  cudaMalloc((void**) &device_in_1, sizeof(int) * one_stripe);
+  cudaMalloc((void**) &device_in_2, sizeof(int) * one_stripe);
+
+  cudaMalloc((void**) &device_result_0, sizeof(int) * one_stripe);
+  cudaMalloc((void**) &device_result_1, sizeof(int) * one_stripe);
+  cudaMalloc((void**) &device_result_2, sizeof(int) * one_stripe);
+
+  cudaMalloc((void**) &out_0, sizeof(int) * one_stripe);
+  cudaMalloc((void**) &out_1, sizeof(int) * one_stripe);
+  cudaMalloc((void**) &out_2, sizeof(int) * one_stripe);
+
+  cudaMalloc((void**) &result_size_0, sizeof(float) * blocks);
+  cudaMalloc((void**) &result_size_1, sizeof(float) * blocks);
+  cudaMalloc((void**) &result_size_2, sizeof(float) * blocks);
+
+
+  cudaMalloc((void**) &histogram_0, sizeof(float) * blocks);
+  cudaMalloc((void**) &histogram_1, sizeof(float) * blocks);
+  cudaMalloc((void**) &histogram_2, sizeof(float) * blocks);
+
+  int *host_inData, *host_outData;
+
+  cudaHostAlloc( (void**)&host_inData, full_data_size * sizeof(int), cudaHostAllocDefault);
+  cudaHostAlloc( (void**)&host_outData, full_data_size * sizeof(int), cudaHostAllocDefault);
+
+  // cudaMemcpy(device_in, inData, sizeof(int) * N, cudaMemcpyHostToDevice);
+
+  // cudaMemcpy(device_result, tmp, sizeof(int) * N, cudaMemcpyHostToDevice);
+  // cudaMemcpy(out, tmp, sizeof(int) * N, cudaMemcpyHostToDevice);
+  // cudaMemcpy(result_size, tmp, sizeof(float) * blocks, cudaMemcpyHostToDevice);
   preallocBlockSums(blocks);
    
     cudaPrintfInit();
@@ -295,7 +358,7 @@ primitive_select_stream(int N, int inData[], int outData[]) {
        printf("%d: %d, ",i ,test_result_size[i]);
     }
     printf("\n");
-  cudaThreadSynchronize();*/
+  cudaThreadSynchronize();
 
     // thrust::device_ptr<float> dev_ptr1(result_size);
     // thrust::device_ptr<float> dev_ptr2(histogram);
@@ -309,7 +372,7 @@ primitive_select_stream(int N, int inData[], int outData[]) {
     for(int i = 0 ; i < blocks; i ++) {
         printf("%d, ", test_histgram[i]);
     }
-    printf("\n");*/
+    printf("\n");
   coalesced<<<gridDim, blockDim, 0,stream0>>>(N, device_result, result_size, histogram, out);
   //  }
   cudaStreamSynchronize( stream0 );
@@ -330,7 +393,7 @@ primitive_select_stream(int N, int inData[], int outData[]) {
     cudaFree(result_size);
     cudaFree(histogram);
     deallocBlockSums();
-}
+}*/
 
 
 __device__ int get_index_to_check(int thread, int num_threads, int set_size, int offset) {

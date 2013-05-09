@@ -86,7 +86,7 @@ void test_select() {
 		cuda_result[i] = 0;
 	}
 	primitive_select(NUM_TUPPLES, relation, cuda_result);
-    primitive_select_stream(NUM_TUPPLES, relation, cuda_result);
+    //primitive_select_stream(NUM_TUPPLES, relation, cuda_result);
     double startTime = CycleTimer::currentSeconds();
     //for(int i = 0 ; i < 10 ; i++) {
        sequential_select(NUM_TUPPLES, relation, sequential_result); 
