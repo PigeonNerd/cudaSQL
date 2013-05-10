@@ -4,8 +4,8 @@
 #include <string>
 #include <cstdlib>
 #include "CycleTimer.h"
-#define magnitude  20 
-#define magnitude2 10 
+#define magnitude  20
+#define magnitude2 10
 
 void printCudaInfo();
 void primitive_select(int N, int inData[], int outData[]);
@@ -15,15 +15,15 @@ void primitive_scan(int N, int inData[], int outData[]);
 void sequential_select(int N , int inData[], int outData[]);
 void streamTest();
 void sequentialTest();
-void test_select(); 
+void test_select();
 void test_join();
-bool validate(int N, int* sequential, int* target); 
+bool validate(int N, int* sequential, int* target);
 float toBW(int bytes, float sec);
 
 int main(int argc, char** argv) {
     test_select();
     //primitive_scan(0, NULL, NULL);
-    //test_join(); 
+    //test_join();
     return 0;
 }
 
@@ -32,18 +32,18 @@ void test_join() {
     int base = 1;
     int base2 = 1;
     for(int i = 0; i < magnitude; i ++) {
-        base <<= 1; 
+        base <<= 1;
     }
     for(int i = 0; i < magnitude2; i ++) {
-        base2 <<= 1; 
+        base2 <<= 1;
     }
-	int NUM_TUPPLES_A  =  base; 
-	int NUM_TUPPLES_B  = base2; 
+	int NUM_TUPPLES_A  =  base;
+	int NUM_TUPPLES_B  = base2;
     int min = 1;
     int max = 20;
-    // these initializatoin might depcrated since 
+    // these initializatoin might depcrated since
     // it is not convinient to access 2D array in cuda
-    int** rel_a = new int*[NUM_TUPPLES_A];    
+    int** rel_a = new int*[NUM_TUPPLES_A];
     int** rel_b = new int*[NUM_TUPPLES_B];
     int** out = new int*[NUM_TUPPLES_A * NUM_TUPPLES_B];
 
@@ -73,30 +73,30 @@ void test_join() {
 void test_select() {
     int base = 1;
     for(int i = 0; i < magnitude; i ++) {
-        base <<= 1; 
+        base <<= 1;
     }
     printf("%d\n", base);
 
-	int NUM_TUPPLES  = 12 * base; 
-	int* relation = new int[NUM_TUPPLES];
-	int* cuda_result = new int[NUM_TUPPLES];
-	int* sequential_result = new int[NUM_TUPPLES];
-     for(int i = 0; i < NUM_TUPPLES; i++) {
-		relation[i] = rand() % 1000 + 1;
-		cuda_result[i] = 0;
-	}
+    int NUM_TUPPLES  = 12 * base;
+    int* relation = new int[NUM_TUPPLES];
+    int* cuda_result = new int[NUM_TUPPLES];
+    int* sequential_result = new int[NUM_TUPPLES];
+    for(int i = 0; i < NUM_TUPPLES; i++) {
+      relation[i] = rand() % 1000 + 1;
+      cuda_result[i] = 0;
+    }
     primitive_select_stream(NUM_TUPPLES, relation, cuda_result);
-	primitive_select(NUM_TUPPLES, relation, cuda_result);
+    primitive_select(NUM_TUPPLES, relation, cuda_result);
     double startTime = CycleTimer::currentSeconds();
     //for(int i = 0 ; i < 10 ; i++) {
-    sequential_select(NUM_TUPPLES, relation, sequential_result); 
+    sequential_select(NUM_TUPPLES, relation, sequential_result);
     //}
     double endTime = CycleTimer::currentSeconds();
     double overallDuration = endTime - startTime;
     printf("Sequential overall: %.3f ms\t\t[%.3f GB/s]\n", 1000.f * overallDuration, toBW( NUM_TUPPLES * sizeof(int) * 2, overallDuration));
 	validate(NUM_TUPPLES, sequential_result, cuda_result);
-    // primitive_scan(0, NULL, NULL); 
-    
+    // primitive_scan(0, NULL, NULL);
+
 }
 
 
@@ -105,7 +105,7 @@ void sequential_select(int N, int inData[], int outData[]) {
     int counter = 0;
     for(int i = 0; i < N; i ++) {
         if(inData[i] % 2 == 0) {
-            outData[counter] = inData[i]; 
+            outData[counter] = inData[i];
             counter++;
         }
     }
@@ -115,7 +115,7 @@ void sequential_select(int N, int inData[], int outData[]) {
 bool validate(int N, int* sequential, int* target) {
     for(int i = 0 ; i < N; i ++) {
         if(sequential[i] != target[i]) {
-            printf("ERROR: Result tuple %d not match, Expected: %d, Actual: %d\n",i, sequential[i], 
+            printf("ERROR: Result tuple %d not match, Expected: %d, Actual: %d\n",i, sequential[i],
                     target[i]);
             return false;
         }
