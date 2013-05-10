@@ -11,7 +11,8 @@ void sequential_select(int N, int inData[], int outData[]);
 using namespace ispc;
 
 int main() {
-
+    
+    printf("Hello world\n");
 
 	return 0;
 }

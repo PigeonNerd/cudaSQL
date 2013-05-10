@@ -6,7 +6,8 @@ task void select_ispc_task( uniform int rowsPerTask,
 	uniform int rowStart = taskIndex * rowsPerTask;
 	uniform int rowStop = rowStart +  rowsPerTask;
 	foreach(i = rowStart ... rowStop) {
-		output[i] = input[i] % 2 == 0 ? input[i] : 0;
+		//output[i] = input[i] % 2 == 0 ? input[i] : 0;
+        output[i] = 1;
 	}
 }
 
