@@ -9,7 +9,7 @@ namespace ispc {
 #if defined(__cplusplus) && !defined(__ISPC_NO_EXTERN_C)
  extern "C" {
 #endif	
- 	void mandelbrot_ispc_withtasks( int32_t N, int32_t input[], int32_t output[]);
+ 	void select_ispc_withtasks( int32_t N, int32_t input[], int32_t output[]);
 #if defined(__cplusplus) && !defined(__ISPC_NO_EXTERN_C)    
 }
 #endif
