@@ -89,7 +89,7 @@ primitive_select_kernel(int N, int blocks, int* tuples, int* result, float* resu
 		 //atomicAdd(result_size + blockIndex, 1);
     	 result[partition + output[threadIndex]] = tuples[partition + threadIndex];
  	}
-    for(int offset = blockDim.x / 2; offset > 0; offset >>= 1) {
+    /*for(int offset = blockDim.x / 2; offset > 0; offset >>= 1) {
         if(threadIdx.x < offset) {
           // add a partial sum upstream to our own
           input[threadIdx.x] += input[threadIdx.x + offset];
@@ -98,10 +98,10 @@ primitive_select_kernel(int N, int blocks, int* tuples, int* result, float* resu
         // wait until all threads in the block have
         // updated their partial sums
         __syncthreads();
-      }
+      }*/
       // thread 0 writes the final result
       if(threadIdx.x == 0) {
-          result_size[blockIndex] = input[0];
+          result_size[blockIndex] = input[511] + output[511];
       }
 }
 

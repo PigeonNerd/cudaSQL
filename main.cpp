@@ -77,7 +77,7 @@ void test_select() {
     }
     printf("%d\n", base);
 
-	int NUM_TUPPLES  = 12 * base; 
+	int NUM_TUPPLES  = base; 
 	int* relation = new int[NUM_TUPPLES];
 	int* cuda_result = new int[NUM_TUPPLES];
 	int* sequential_result = new int[NUM_TUPPLES];
@@ -85,7 +85,7 @@ void test_select() {
 		relation[i] = rand() % 1000 + 1;
 		cuda_result[i] = 0;
 	}
-    primitive_select_stream(NUM_TUPPLES, relation, cuda_result);
+    //primitive_select_stream(NUM_TUPPLES, relation, cuda_result);
 	primitive_select(NUM_TUPPLES, relation, cuda_result);
     double startTime = CycleTimer::currentSeconds();
     //for(int i = 0 ; i < 10 ; i++) {
