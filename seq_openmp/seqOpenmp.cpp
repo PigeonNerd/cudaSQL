@@ -6,8 +6,9 @@
 #include "CycleTimer.h"
 #include "seqOpenmp.h"
 #include <omp.h>
+#include <cmath>
 
-#define magnitude 3
+#define magnitude 15 
 
 void seq_openmp() {
   int base = 1;
@@ -23,8 +24,8 @@ void seq_openmp() {
   int* result = new int[NUM_TUPLES];
   int* openmp_result = new int[NUM_TUPLES];
   for (int i = 0; i < NUM_TUPLES; i++) {
-    //relation[i] = rand() % 1000 + 1;
-    relation[i] = 1;
+    relation[i] = rand() % 1000 + 1;
+    //relation[i] = 1;
     result[i] = 0;
   }
 
@@ -33,10 +34,16 @@ void seq_openmp() {
   sequential_select(NUM_TUPLES, relation, result);
   endTime = CycleTimer::currentSeconds();
   overallDuration = endTime - startTime;
+  
+  printf("Sequential overall: %.3f ms\t\t[%.3f GB/s]\n", 1000.f * overallDuration, toBW(NUM_TUPLES * sizeof(int) * 2, overallDuration));
+  startTime = CycleTimer::currentSeconds();
   openmp_select(NUM_TUPLES, relation, openmp_result);
+  endTime = CycleTimer::currentSeconds();
+  overallDuration = endTime - startTime;
+
+  printf("openmp overall: %.3f ms\t\t[%.3f GB/s]\n", 1000.f * overallDuration, toBW(NUM_TUPLES * sizeof(int) * 2, overallDuration));
 
   validate(NUM_TUPLES, openmp_result, result);
-  printf("Sequential overall: %.3f ms\t\t[%.3f GB/s]\n", 1000.f * overallDuration, toBW(NUM_TUPLES * sizeof(int) * 2, overallDuration));
 }
 
 
@@ -51,65 +58,43 @@ void sequential_select(int N, int inData[], int outData[]) {
 }
 
 
-void prefix_sum(int n, int x[], int z[]) {
-    // int j;
-    // int tid;
-    // #pragma omp parallel shared(n,x,t) private(j,tid) num_threads(n)
-    // {
-    //    tid = omp_get_thread_num();
-    //    for (j = 1; j < n; j = 2*j) {
-    //         if (tid >= j)
-    //                t[tid] = x[tid] + x[tid - j];
-    //          #pragma omp barrier
-    //          x[tid] = t[tid];
-    //          #pragma omp barrier
-    //      } 
-    // }
-
-int n, nthr;
-int i,j,tid,work,lo,hi;
-#pragma omp parallel shared(n,nthr,x,z) private(i,j,tid,work,lo,hi)
-{
-    #pragma omp single
-      nthr = omp_get_num_threads();
-    tid = omp_get_thread_num();
-    work = (n + nthr-1) / nthr;
-    lo = work * tid;
-    hi = lo + work;
-    if (hi > n)
-      hi = n;
-    for (i = lo+1; i < hi; i++)
-      x[i] = x[i] + x[i-1];
-    z[tid] = x[hi-1];
-    #pragma omp barrier
-    for (j = 1; j < nthr; j = 2*j) {
-      if (tid >= j)
-        z[tid] = z[tid] + z[tid - j];
-      #pragma omp barrier
-    }
-    for (i = lo; i < hi; i++)
-￼￼￼￼    x[i] = x[i] + z[tid] - x[hi-1];
-}
+void prefix_sum(int n, int x[], int t[]) {
+   /* int i,j;
+    for (j = 0; j < log2(n); j++) {
+        #pragma omp parallel private(i)
+        {
+            #pragma omp for
+            for (i = 1<<j; i < n; i++)
+                t[i] = x[i] + x[i -( 1<<j)];
+            #pragma omp for
+            for (i = 1<<j; i < n; i++)
+                x[i] = t[i];
+        }
+    }*/
 }
 
 void openmp_select(int N, int inData[], int outData[]) {
-    int input[N];
-    int output[N];
+    int input1[N];
+    int input2[N];
+    int output[2 * N];
 
  #pragma omp parallel for schedule(dynamic, 1)
    for(int i = 0; i < N; i ++) {
-       //input[i] = 0;
-     //if(inData[i] % 2 == 0){
- 	     input[i] = 1;
-       //}
+       input1[i] = 0;
+       input2[i] = 0;
+     if(inData[i] % 2 == 0){
+ 	     input1[i] = 1;
+ 	     input2[i] = 1;
+     }
    }
 
-   prefix_sum(N, input, output);
-   for(int i = 0 ; i < N; i ++) {
-        printf("%d ", input[i]);
-   }
-   printf("\n");
-
+ prefix_sum(N, input1, output);
+ #pragma omp parallel for schedule(dynamic, 1)
+   for(int i = 0; i < N; i ++) {
+        if(input2[i]) {
+          outData[input1[i] - 1] = inData[i]; 
+    }
+   } 
 }
 
 bool validate(int N, int* openmp, int* target) {

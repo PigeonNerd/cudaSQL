@@ -11,7 +11,6 @@ task void select_ispc_task( uniform int rowsPerTask,
         }
 	}
 }
-
 export void select_ispc_withtasks( uniform int N,
 								 uniform int input[],
 							     uniform int output[])

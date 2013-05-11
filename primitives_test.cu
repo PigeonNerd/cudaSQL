@@ -258,7 +258,8 @@ void
 primitive_select_stream(int N, int inData[], int outData[]) {
 
   int full_data_size = N;
-  int one_stripe = 1024*1024;
+  //int one_stripe = 1024*1024;
+  int one_stripe = 1024 * 1024;
   cudaStream_t stream0, stream1, stream2;
   
   const int threadPerBlock = 512;
@@ -716,8 +717,8 @@ void primitive_join(int N, int M) {
     float* histogram;
     int3* out;
     int3* result;
-    cudaMalloc((void**) &out, sizeof(int3) * N * M);
-    cudaMalloc((void**) &result, sizeof(int3) * N * M);
+    cudaMalloc((void**) &out, sizeof(int3) * N * 4);
+    cudaMalloc((void**) &result, sizeof(int3) * N * 4);
     cudaMalloc((void**) &result_size, sizeof(float) * blocks);
     cudaMalloc((void**) &histogram, sizeof(float) * blocks);
     cudaMalloc((void**) &out_bound, sizeof(float) * blocks);
@@ -738,7 +739,7 @@ void primitive_join(int N, int M) {
     thrust::exclusive_scan(dev_ptr1, dev_ptr1 + blocks, dev_ptr1);
     //prescanArray(out_bound, out_bound, blocks);
     //deallocBlockSums();
-    brute_join<<< blocks, threadPerBlock >>>(out, dev_rel_a, dev_rel_b,  N * M , N, M, out_bound, result_size, lower_array, upper_array);
+    brute_join<<< blocks, threadPerBlock >>>(out, dev_rel_a, dev_rel_b,  N * 4 , N, M, out_bound, result_size, lower_array, upper_array);
 
     thrust::device_ptr<float> dev_ptr2(result_size);
     thrust::device_ptr<float> dev_ptr3(histogram);

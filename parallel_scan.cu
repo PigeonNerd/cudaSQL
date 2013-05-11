@@ -8,7 +8,7 @@
 #define b32(x)      (b16(x) | (b16(x) >>16) )
 #define next_power_of_2(x)      (b32(x-1) + 1)
 
-#define ARR_SIZE   2048
+#define ARR_SIZE  2048 
 #define ARR_SIZE_PAD    next_power_of_2(ARR_SIZE)
 #define TILE_SIZE  1024
 #define SUM_SIZE        ARR_SIZE_PAD/TILE_SIZE

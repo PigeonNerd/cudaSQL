@@ -4,7 +4,7 @@
 
 #include "CycleTimer.h"
 #include "seq_ispc.h"
-#define magnitude  20
+#define magnitude  25
 
 void sequential_select_dumb(int N, int inData[], int outData[]);
 float toBW(int bytes, float sec);
@@ -19,7 +19,7 @@ int main() {
               base <<= 1;
           }
           printf("%d\n", base);
-          int NUM_TUPPLES  = 12 * base;
+          int NUM_TUPPLES  = 3 * base;
           int* relation = new int[NUM_TUPPLES];
           int* sequential_result = new int[NUM_TUPPLES];
           for(int i = 0; i < NUM_TUPPLES; i++) {
