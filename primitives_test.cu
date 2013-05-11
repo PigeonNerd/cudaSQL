@@ -703,8 +703,8 @@ void primitive_join(int N, int M) {
     sequential_join(rel_a, rel_b, N, M, result_seq, &seq_num);
 
     // prepare device buffers
-	const int threadPerBlock = 512;
-	const int blocks = (N + threadPerBlock - 1) / threadPerBlock;
+	  const int threadPerBlock = 512;
+	  const int blocks = (N + threadPerBlock - 1) / threadPerBlock;
     printf("num blocks: %d\n", blocks);
     int2* dev_rel_a;
     int2* dev_rel_b;
@@ -728,12 +728,12 @@ void primitive_join(int N, int M) {
 	
     double startTime = CycleTimer::currentSeconds();
     cudaMemcpy(dev_rel_a, rel_a, sizeof(int2) * N, cudaMemcpyHostToDevice);
-	cudaMemcpy(dev_rel_b, rel_b, sizeof(int2) * M, cudaMemcpyHostToDevice);
+	  cudaMemcpy(dev_rel_b, rel_b, sizeof(int2) * M, cudaMemcpyHostToDevice);
     cudaPrintfInit();
 
     double startTime_inner = CycleTimer::currentSeconds();
 
-    pnary_partition<<< blocks, threadPerBlock >>>(dev_rel_a, dev_rel_b, lower_array, upper_array ,out_bound, N, M);
+    pnary_partition<<< blocks, threadPerBlock >>>(dev_rel_a, dev_rel_b, lower_array, upper_array , out_bound, N, M);
     thrust::device_ptr<float> dev_ptr1(out_bound);
     thrust::exclusive_scan(dev_ptr1, dev_ptr1 + blocks, dev_ptr1);
     //prescanArray(out_bound, out_bound, blocks);
