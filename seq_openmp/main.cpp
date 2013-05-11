@@ -8,7 +8,7 @@
 #include "CycleTimer.h"
 #include "seqOpenmp.h"
 extern void seq_openmp();
-int main(int argc, char **argv) {
+int main() {
   seq_openmp();
   return 0;
 }
