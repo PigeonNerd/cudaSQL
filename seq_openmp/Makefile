@@ -13,7 +13,7 @@ LDFLAGS+=-lpthread
 # all should come first in the file, so it is the default target!
 all : seqOpenmp
 run : seqOpenmp
-        OMP_NUM_THREADS=4 ./seqOpenmp
+        OMP_NUM_THREADS=12 ./seqOpenmp
 seqOpenmp: seqOpenmp.cpp
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o seqOpenmp seqOpenmp.cpp main.cpp
 clean:

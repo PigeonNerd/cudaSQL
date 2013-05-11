@@ -1,24 +1,39 @@
 task void select_ispc_task( uniform int rowsPerTask,
 							uniform int input[],
-							uniform int output[])
+						    uniform int output[],
+	                        uniform int in_scan[],
+                            uniform int in_index[])
 {
 	uniform int rowStart = taskIndex * rowsPerTask;
 	uniform int rowStop = rowStart +  rowsPerTask;
-    uniform int divider = 2;
-	foreach(i = rowStart ... rowStop) {
+
+    foreach(i = rowStart ... rowStop) {
+        in_scan[i] = 0;
+        in_index[i] = 0;
 		if (input[i] > 500 ) {
-            output[i] = input[i];
+            in_scan[i] = 1;
+            in_index[i] = 1;
         }
 	}
 }
-export void select_ispc_withtasks( uniform int N,
-								 uniform int input[],
-							     uniform int output[])
-{
-	uniform int rowsPerTask = N / 4;
-	launch[4] select_ispc_task(rowsPerTask, input, output);
-}
 
+task void coalasced_ispc_task( uniform int rowsPerTask,
+							uniform int input[],
+						    uniform int output[],
+	                        uniform int in_scan[],
+                            uniform int in_index[]) {
+
+	uniform int rowStart = taskIndex * rowsPerTask;
+	uniform int rowStop = rowStart +  rowsPerTask;
+    int index; 
+    foreach(i = rowStart ... rowStop) {
+        if(in_index[i]) {
+            index = in_scan[i];
+            output[index] = input[i];
+        }
+    }
+
+}
 static int warp_scan(int value)
 {
   for (int i = 1; i < programCount; i *= 2)
@@ -70,4 +85,17 @@ export void add(
   {
     data[i] += value;
   }
+}
+
+export void select_ispc_withtasks( uniform int N,
+								 uniform int input[],
+							     uniform int output[],
+                                 uniform int in_scan[],
+                                 uniform int in_index[])
+{
+
+	uniform int rowsPerTask = N / 4;
+	launch[4] select_ispc_task(rowsPerTask, input, output, in_scan, in_index);
+    exclusive_scan(N, in_scan);
+    launch[4] coalasced_ispc_task(rowsPerTask, input, output, in_scan, in_index);
 }

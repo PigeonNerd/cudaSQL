@@ -7,8 +7,9 @@
 #include "seqOpenmp.h"
 #include <omp.h>
 #include <cmath>
+#include<cassert>
 
-#define magnitude 15 
+#define magnitude 20 
 
 void seq_openmp() {
   int base = 1;
@@ -57,27 +58,9 @@ void sequential_select(int N, int inData[], int outData[]) {
   }
 }
 
-
-void prefix_sum(int n, int x[], int t[]) {
-   /* int i,j;
-    for (j = 0; j < log2(n); j++) {
-        #pragma omp parallel private(i)
-        {
-            #pragma omp for
-            for (i = 1<<j; i < n; i++)
-                t[i] = x[i] + x[i -( 1<<j)];
-            #pragma omp for
-            for (i = 1<<j; i < n; i++)
-                x[i] = t[i];
-        }
-    }*/
-}
-
 void openmp_select(int N, int inData[], int outData[]) {
     int input1[N];
     int input2[N];
-    int output[2 * N];
-
  #pragma omp parallel for schedule(dynamic, 1)
    for(int i = 0; i < N; i ++) {
        input1[i] = 0;
@@ -87,12 +70,17 @@ void openmp_select(int N, int inData[], int outData[]) {
  	     input2[i] = 1;
      }
    }
+exclusive_scan( N, input1);
 
- prefix_sum(N, input1, output);
+   // for(int i = 0 ; i < N; i++) {
+   //     printf("%d \n", input1[i]);
+   // }
+   // printf("\n");
+
  #pragma omp parallel for schedule(dynamic, 1)
    for(int i = 0; i < N; i ++) {
         if(input2[i]) {
-          outData[input1[i] - 1] = inData[i]; 
+          outData[input1[i]] = inData[i]; 
     }
    } 
 }
@@ -111,7 +99,7 @@ float toBW(int bytes, float sec) {
   return static_cast<float>(bytes) / (1024. * 1024. * 1024.) / sec;
 }
 
-static void exclusive_scan(const int n, int *data)
+void exclusive_scan(const int n, int *data)
 {
   const int NTHREAD_MAX = 65536;
   static int partial_sum[NTHREAD_MAX];
