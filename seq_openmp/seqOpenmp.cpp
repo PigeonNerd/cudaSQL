@@ -51,20 +51,45 @@ void sequential_select(int N, int inData[], int outData[]) {
 }
 
 
-void prefix_sum(int n, int x[], int t[]) {
-    int j;
-    int tid;
-    #pragma omp parallel shared(n,x,t) private(j,tid) num_threads(n)
-    {
-       tid = omp_get_thread_num();
-       for (j = 1; j < n; j = 2*j) {
-            if (tid >= j)
-                   t[tid] = x[tid] + x[tid - j];
-             #pragma omp barrier
-             x[tid] = t[tid];
-             #pragma omp barrier
-         } 
+void prefix_sum(int n, int x[], int z[]) {
+    // int j;
+    // int tid;
+    // #pragma omp parallel shared(n,x,t) private(j,tid) num_threads(n)
+    // {
+    //    tid = omp_get_thread_num();
+    //    for (j = 1; j < n; j = 2*j) {
+    //         if (tid >= j)
+    //                t[tid] = x[tid] + x[tid - j];
+    //          #pragma omp barrier
+    //          x[tid] = t[tid];
+    //          #pragma omp barrier
+    //      } 
+    // }
+
+int n, nthr;
+int i,j,tid,work,lo,hi;
+#pragma omp parallel shared(n,nthr,x,z) private(i,j,tid,work,lo,hi)
+{
+    #pragma omp single
+      nthr = omp_get_num_threads();
+    tid = omp_get_thread_num();
+    work = (n + nthr-1) / nthr;
+    lo = work * tid;
+    hi = lo + work;
+    if (hi > n)
+      hi = n;
+    for (i = lo+1; i < hi; i++)
+      x[i] = x[i] + x[i-1];
+    z[tid] = x[hi-1];
+    #pragma omp barrier
+    for (j = 1; j < nthr; j = 2*j) {
+      if (tid >= j)
+        z[tid] = z[tid] + z[tid - j];
+      #pragma omp barrier
     }
+    for (i = lo; i < hi; i++)
+￼￼￼￼    x[i] = x[i] + z[tid] - x[hi-1];
+}
 }
 
 void openmp_select(int N, int inData[], int outData[]) {
