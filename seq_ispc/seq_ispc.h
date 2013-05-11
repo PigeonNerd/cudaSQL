@@ -10,6 +10,7 @@ namespace ispc {
  extern "C" {
 #endif	
  	void select_ispc_withtasks( int32_t N, int32_t input[], int32_t output[]);
+ 	 void exclusive_scan(const int32_t n, int32_t data[])
 #if defined(__cplusplus) && !defined(__ISPC_NO_EXTERN_C)    
 }
 #endif
