@@ -110,3 +110,84 @@ bool validate(int N, int* openmp, int* target) {
 float toBW(int bytes, float sec) {
   return static_cast<float>(bytes) / (1024. * 1024. * 1024.) / sec;
 }
+
+static void exclusive_scan(const int n, int *data)
+{
+  const int NTHREAD_MAX = 65536;
+  static int partial_sum[NTHREAD_MAX];
+
+  static int nthreads = 0;
+#pragma omp parallel
+#pragma omp master
+  nthreads = omp_get_num_threads();
+  printf("exclusive_scan:: nthreads= %d\n", nthreads);
+
+  const int nlaunch = std::min(n/16,nthreads);
+
+#pragma omp parallel num_threads(nlaunch)
+  {
+    const int blockIdx = omp_get_thread_num();
+    const int gridDim  = omp_get_num_threads();
+    const int blockDim = std::max((n/gridDim) & -64, 16);
+
+
+    if (blockIdx == 0)
+    assert(gridDim < NTHREAD_MAX);
+
+    int nblock = 0;
+    for (int ibeg = blockIdx*blockDim; ibeg < n; ibeg += blockDim*gridDim, nblock += gridDim)
+    {
+      assert(nblock < NTHREAD_MAX);
+      const int iend = std::min(ibeg+blockDim, n);
+
+      const int value = data[iend-1];
+#if 0
+      ispc::exclusive_scan(iend-ibeg, &data[ibeg]);
+#else
+      int prev = 0;
+      for (int i = ibeg; i < iend; i++)
+      {
+        const int y = data[i];
+        data[i] = prev;
+        prev += y;
+      }
+#endif
+      partial_sum[nblock + blockIdx] = value + data[iend-1];
+    }
+
+#pragma omp barrier
+
+
+#if 0
+    if (blockIdx == 0)
+        ispc::exclusive_scan(nblock, &partial_sum[0]);
+#else
+    if (blockIdx == 0)
+    {
+      int prev = 0;
+      for (int i = 0; i < nblock; i++)
+      {
+        const int y = partial_sum[i];
+        partial_sum[i] = prev;
+        prev += y;
+      }
+    }
+#endif
+
+#pragma omp barrier
+
+    nblock = 0;
+    for (int ibeg = blockIdx*blockDim; ibeg < n; ibeg += blockDim*gridDim, nblock += gridDim)
+    {
+      const int iend = std::min(ibeg+blockDim, n);
+#if 0
+      ispc::add(iend-ibeg, partial_sum[nblock + blockIdx], &data[ibeg]);
+#else  /* this one is slower */
+      const int sum = partial_sum[nblock + blockIdx];
+      for (int i = ibeg; i < iend; i++)
+        data[i] += sum;
+#endif
+    }
+  }
+}
+

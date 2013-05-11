@@ -7,4 +7,5 @@ void sequential_select(int N, int inData[], int outData[]);
 void openmp_select(int N, int inData[], int outData[]);
 float toBW(int bytes, float sec);
 void prefix_sum(int n, int x[], int t[]);
+static void exclusive_scan(const int n, int *data);
 #endif
